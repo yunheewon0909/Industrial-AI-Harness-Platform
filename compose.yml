@@ -1,0 +1,16 @@
+services:
+  api:
+    image: ghcr.io/astral-sh/uv:python3.11-bookworm
+    working_dir: /workspace/apps/api
+    volumes:
+      - ./:/workspace
+    command: ["uv", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+
+  worker:
+    image: ghcr.io/astral-sh/uv:python3.11-bookworm
+    working_dir: /workspace/apps/worker
+    volumes:
+      - ./:/workspace
+    command: ["uv", "run", "python", "-m", "worker.main"]
