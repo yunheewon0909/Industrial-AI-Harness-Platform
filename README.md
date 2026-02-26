@@ -21,7 +21,7 @@ Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.
 
 - [x] M0: 레포 초기화 + 기본 문서/규칙 + 디렉토리 트리
 - [x] M1: OMX 도커 샌드박스 파일 + 호스트 검증
-- [ ] M2: uv 기반 Python api/worker 스켈레톤
+- [x] M2: uv 기반 Python api/worker 스켈레톤
 - [ ] M3: api/worker 최소 compose
 
 ## 3. 아키텍처(초기)

@@ -1,0 +1,12 @@
+[project]
+name = "industrial-ai-harness-platform"
+version = "0.1.0"
+description = "Week-1 MVP skeleton for Industrial AI Harness Platform"
+requires-python = "==3.11.*"
+dependencies = []
+
+[tool.uv.workspace]
+members = [
+  "apps/api",
+  "apps/worker",
+]
