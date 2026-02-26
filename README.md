@@ -88,6 +88,13 @@ docker compose -f compose.omx.yml build
 docker compose -f compose.omx.yml run --rm omx-sandbox
 ```
 
+컨테이너 셸에 진입한 뒤 OMX 실행:
+
+```bash
+omx setup --scope project
+omx --xhigh --madmax
+```
+
 기대 로그(요약):
 
 - git user/email 설정 확인
