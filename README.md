@@ -1,1 +1,153 @@
-# Industrial-AI-Harness-Platform
+# Industrial AI Harness Platform
+
+Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.  
+원칙은 `호스트(macOS) = Homebrew + uv 중심`, `위험 실행(OMX madmax/codex) = Docker sandbox 내부 전용`입니다.
+
+## 1. 목적
+
+- 산업용 AI 하네스 플랫폼의 최소 실행 뼈대를 만든다.
+- API/FastAPI와 Worker를 분리해 이후 DB/큐를 단계적으로 붙일 수 있게 한다.
+- 운영 규칙(커밋 게이트, 문서 우선 업데이트)을 코드와 문서에 함께 강제한다.
+
+## 2. Week-1 범위
+
+- `apps/api`: FastAPI `/health`, `/jobs`(초기 빈 배열)
+- `apps/worker`: 30초 heartbeat 출력
+- `shared/db/interface.py`: 다음 마일스톤용 DB 인터페이스 자리만 제공
+- `Dockerfile`, `entrypoint.sh`, `compose.omx.yml`: OMX 격리 샌드박스
+- `compose.yml`: api/worker만 띄우는 최소 실행 골격(DB 없음)
+
+## 2.1 마일스톤 진행 상태
+
+- [x] M0: 레포 초기화 + 기본 문서/규칙 + 디렉토리 트리
+- [ ] M1: OMX 도커 샌드박스 파일 + 호스트 검증
+- [ ] M2: uv 기반 Python api/worker 스켈레톤
+- [ ] M3: api/worker 최소 compose
+
+## 3. 아키텍처(초기)
+
+```text
+macOS host
+  ├─ uv / git / docker (host tools)
+  ├─ repo working tree
+  └─ Docker OMX sandbox
+       ├─ Node 20+, @openai/codex, oh-my-codex
+       ├─ forwarded SSH agent socket
+       └─ host ~/.codex(ro) -> container $CODEX_HOME(rw, one-time copy)
+
+Week-1 services
+  ├─ api (FastAPI)
+  └─ worker (heartbeat loop)
+```
+
+## 4. 호스트 사전 준비(필수)
+
+아래는 **호스트(macOS)** 에서만 실행:
+
+```bash
+brew install uv || brew upgrade uv
+uv --version
+
+echo $SSH_AUTH_SOCK
+ssh-add -l
+
+ls -la ~/.codex
+docker --version
+docker compose version
+```
+
+## 5. 안전 실행 원칙
+
+- `omx --madmax`, `codex` 실행은 **반드시 컨테이너 내부에서만** 수행한다.
+- 호스트에서는 빌드/런/셸 진입/상태 확인까지만 수행한다.
+- SSH 키 파일은 공유하지 않고 `SSH_AUTH_SOCK` 에이전트 포워딩만 사용한다.
+- 호스트 `~/.codex`는 컨테이너에 read-only 마운트하고, 컨테이너 내부 `CODEX_HOME`에 1회 복사해 사용한다.
+
+## 6. 마일스톤 커밋 게이트 규칙(필수)
+
+각 마일스톤마다 아래 순서를 강제한다.
+
+1. 변경사항 검증
+2. README 업데이트 (이번 마일스톤 반영)
+3. Conventional Commit으로 커밋
+4. 다음 마일스톤 진행
+
+권장 커밋 메시지:
+
+- `chore: init repo skeleton and policies`
+- `chore(omx): add docker sandbox for madmax execution`
+- `chore(uv): scaffold api/worker python projects with uv`
+- `chore(compose): add minimal compose for api/worker`
+
+## 7. 실행/검증(호스트 기준)
+
+### 7.1 OMX 샌드박스
+
+```bash
+docker compose -f compose.omx.yml build
+docker compose -f compose.omx.yml run --rm omx-sandbox
+```
+
+기대 로그(요약):
+
+- git user/email 설정 확인
+- SSH agent 소켓 감지 성공
+- `/host-codex` -> `$CODEX_HOME` 1회 복사 메시지
+
+### 7.2 API 단독 검증(호스트)
+
+```bash
+uv run --project apps/api uvicorn api.main:app --host 0.0.0.0 --port 8000
+curl -s http://127.0.0.1:8000/health
+curl -s http://127.0.0.1:8000/jobs
+```
+
+기대 응답:
+
+- `/health` -> `{"status":"ok"}`
+- `/jobs` -> `[]`
+
+### 7.3 Worker 단독 검증(호스트)
+
+```bash
+uv run --project apps/worker python -m worker.main
+```
+
+기대 로그(요약):
+
+- 30초 간격 heartbeat 출력
+
+### 7.4 Compose(api/worker) 검증(선택)
+
+```bash
+docker compose up --build
+```
+
+기대 로그(요약):
+
+- `api` 서비스 기동 및 8000 포트 노출
+- `worker` heartbeat 반복 출력
+
+## 8. 디렉토리 구조
+
+```text
+.
+├── AGENTS.md
+├── Dockerfile
+├── README.md
+├── compose.omx.yml
+├── compose.yml
+├── entrypoint.sh
+├── .python-version
+├── pyproject.toml
+├── uv.lock
+├── apps
+│   ├── api
+│   │   ├── pyproject.toml
+│   │   └── src/api/main.py
+│   └── worker
+│       ├── pyproject.toml
+│       └── src/worker/main.py
+└── shared
+    └── db/interface.py
+```

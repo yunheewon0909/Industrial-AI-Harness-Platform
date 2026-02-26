@@ -1,0 +1,25 @@
+# Agent/runtime directories
+.omx/
+.codex/
+.agents/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.python-version.local
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+
+# Logs and env
+*.log
+.env
+.env.*
