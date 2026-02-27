@@ -230,6 +230,15 @@ docker compose exec -T postgres psql -U postgres -d industrial_ai -c "select wor
 - `jobs` 테이블 생성 확인
 - `worker_heartbeats` 테이블 생성 확인
 
+### 7.5 How to run tests
+
+테스트는 Docker/Postgres 없이 로컬에서 실행 가능하다.
+
+```bash
+uv run --project apps/api pytest -q
+uv run --project apps/worker pytest -q
+```
+
 ## 8. 디렉토리 구조
 
 ```text
