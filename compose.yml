@@ -35,6 +35,13 @@ services:
     working_dir: /workspace/apps/worker
     volumes:
       - ./:/workspace
+    environment:
+      WORKER_DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/industrial_ai
+      WORKER_ID: worker-1
+      WORKER_HEARTBEAT_SECONDS: "30"
+    depends_on:
+      postgres:
+        condition: service_healthy
     command: ["uv", "run", "python", "-m", "worker.main"]
 
 volumes:

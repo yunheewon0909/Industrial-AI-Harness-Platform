@@ -12,7 +12,7 @@ Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.
 ## 2. Week-1 범위
 
 - `apps/api`: FastAPI `/health`, `/jobs`(DB 조회) + Alembic jobs 마이그레이션
-- `apps/worker`: 30초 heartbeat 출력
+- `apps/worker`: DB heartbeat upsert + retry/backoff
 - `shared/db/interface.py`: 다음 마일스톤용 DB 인터페이스 자리만 제공
 - `Dockerfile`, `entrypoint.sh`, `compose.omx.yml`: OMX 격리 샌드박스
 - `compose.yml`: api/worker/postgres 최소 실행 골격
@@ -24,7 +24,7 @@ Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.
 - [x] M2: uv 기반 Python api/worker 스켈레톤
 - [x] M3: Postgres 서비스 + API DB 설정 플럼빙 + Alembic 스캐폴드
 - [x] M4: Alembic jobs 마이그레이션 + `/jobs` DB 조회
-- [ ] M5: worker heartbeat DB upsert + retry/backoff
+- [x] M5: worker heartbeat DB upsert + retry/backoff
 
 ## 3. 아키텍처(초기)
 
@@ -167,7 +167,7 @@ docker compose -f compose.omx.yml run --rm omx-sandbox
 ```bash
 export API_DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/industrial_ai
 
-# jobs 테이블 migration 적용
+# jobs / worker_heartbeats 테이블 migration 적용
 uv run --project apps/api alembic -c apps/api/alembic.ini upgrade head
 
 uv run --project apps/api uvicorn api.main:app --host 0.0.0.0 --port 8000
@@ -186,12 +186,17 @@ uv run --project apps/api alembic -c apps/api/alembic.ini heads
 ### 7.3 Worker 단독 검증(호스트)
 
 ```bash
+export WORKER_DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/industrial_ai
+export WORKER_ID=worker-local
+export WORKER_HEARTBEAT_SECONDS=30
+
 uv run --project apps/worker python -m worker.main
 ```
 
 기대 로그(요약):
 
-- 30초 간격 heartbeat 출력
+- `worker_heartbeats` 테이블에 upsert heartbeat 수행
+- DB 오류 시 exponential backoff + jitter로 재시도
 
 ### 7.4 Compose(api/worker/postgres) 검증(선택)
 
@@ -212,8 +217,9 @@ docker compose exec -T postgres psql -U postgres -d industrial_ai -c "\dt"
 
 - `postgres` healthy 상태 진입
 - `api` 서비스 기동 및 8000 포트 노출
-- `worker` heartbeat 반복 출력
+- `worker` heartbeat upsert 반복 출력
 - `jobs` 테이블 생성 확인
+- `worker_heartbeats` 테이블 생성 확인
 
 ## 8. 디렉토리 구조
 
@@ -237,6 +243,7 @@ docker compose exec -T postgres psql -U postgres -d industrial_ai -c "\dt"
 │   │   │   ├── script.py.mako
 │   │   │   └── versions/
 │   │   │       └── 20260227_0001_create_jobs_table.py
+│   │   │       └── 20260227_0002_create_worker_heartbeats_table.py
 │   │   └── src/api/
 │   │       ├── config.py
 │   │       ├── db.py

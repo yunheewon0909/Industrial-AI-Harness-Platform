@@ -155,6 +155,16 @@ source = { virtual = "." }
 name = "industrial-ai-worker"
 version = "0.1.0"
 source = { editable = "apps/worker" }
+dependencies = [
+    { name = "psycopg", extra = ["binary"] },
+    { name = "sqlalchemy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.2.0,<4.0.0" },
+    { name = "sqlalchemy", specifier = ">=2.0.0,<3.0.0" },
+]
 
 [[package]]
 name = "mako"
