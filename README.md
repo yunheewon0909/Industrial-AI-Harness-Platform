@@ -194,6 +194,15 @@ uv run --project apps/worker python -m worker.main
 
 ```bash
 docker compose up --build
+
+# 서비스명 확인
+docker compose config --services
+
+# 로그 확인 (서비스명은 postgres)
+docker compose logs --tail=120 postgres api worker
+
+# DB 스키마 확인
+docker compose exec -T postgres psql -U postgres -d industrial_ai -c "\dt"
 ```
 
 기대 로그(요약):
