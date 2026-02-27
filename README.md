@@ -88,6 +88,19 @@ docker compose -f compose.omx.yml build
 docker compose -f compose.omx.yml run --rm omx-sandbox
 ```
 
+`codex`와 `oh-my-codex`를 최신으로 강제 갱신하며 빌드하려면:
+
+```bash
+NPM_REFRESH=$(date +%s) docker compose -f compose.omx.yml build --pull
+docker compose -f compose.omx.yml run --rm omx-sandbox
+```
+
+특정 npm 태그를 지정하고 싶다면:
+
+```bash
+CODEX_NPM_TAG=latest OMX_NPM_TAG=latest NPM_REFRESH=$(date +%s) docker compose -f compose.omx.yml build --pull
+```
+
 컨테이너 셸에 진입한 뒤 OMX 실행:
 
 ```bash
@@ -95,11 +108,57 @@ omx setup --scope project
 omx --xhigh --madmax
 ```
 
+참고:
+
+- 엔트리포인트가 `~/.codex/config.toml`의 호스트 절대경로(예: `/Users/.../.omx/agents/...`)를 컨테이너 경로 `/workspace/.omx/agents/...`로 자동 보정한다.
+- 따라서 호스트와 컨테이너를 오갈 때마다 `omx setup`을 매번 다시 할 필요는 없다.
+- 단, 프로젝트의 `.omx`를 지웠거나 컨테이너의 Codex 상태 볼륨(`omx-codex-home`)을 초기화한 경우에는 컨테이너에서 `omx setup --scope project`를 1회 다시 실행한다.
+
 기대 로그(요약):
 
 - git user/email 설정 확인
 - SSH agent 소켓 감지 성공
 - `/host-codex` -> `$CODEX_HOME` 1회 복사 메시지
+
+#### 7.1.1 다른 프로젝트에서 샌드박스 재사용
+
+가능하다. 아래 3개 파일을 다른 프로젝트 루트로 복사하면 경로 매핑은 자동으로 맞춰진다.
+
+- `Dockerfile`
+- `entrypoint.sh`
+- `compose.omx.yml`
+
+복사 예시(호스트):
+
+```bash
+# 대상 프로젝트 루트로 이동
+cd <target-project-root>
+
+# 이 레포를 소스 템플릿으로 사용해 복사
+cp <omx-sandbox-source>/Dockerfile .
+cp <omx-sandbox-source>/entrypoint.sh .
+cp <omx-sandbox-source>/compose.omx.yml .
+chmod +x entrypoint.sh
+```
+
+자동 매핑되는 항목:
+
+- 대상 프로젝트 루트(`./`) -> 컨테이너 `/workspace`
+- 호스트 `~/.codex`(ro) -> 컨테이너 `/host-codex`
+- SSH agent 소켓 -> 컨테이너 `/ssh-agent`
+- `~/.codex/config.toml`의 호스트 절대경로(`/Users/.../.omx/...`) -> `/workspace/.omx/...`로 엔트리포인트가 자동 보정
+
+재사용 시 실행 순서(호스트):
+
+```bash
+NPM_REFRESH=$(date +%s) docker compose -f compose.omx.yml build --pull
+docker compose -f compose.omx.yml run --rm omx-sandbox
+```
+
+주의:
+
+- 대상 프로젝트에 `.omx/agents`가 없으면 경로 보정은 스킵된다. 이 경우 컨테이너에서 `omx setup --scope project`를 1회 실행해 `.omx`를 먼저 생성한다.
+- `.omx`를 삭제했거나 `omx-codex-home` 볼륨을 초기화했다면, 역시 컨테이너에서 `omx setup --scope project`를 1회 다시 실행한다.
 
 ### 7.2 API 단독 검증(호스트)
 

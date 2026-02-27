@@ -3,6 +3,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        CODEX_NPM_TAG: ${CODEX_NPM_TAG:-latest}
+        OMX_NPM_TAG: ${OMX_NPM_TAG:-latest}
+        NPM_REFRESH: ${NPM_REFRESH:-0}
     image: industrial-ai-omx-sandbox:latest
     working_dir: /workspace
     stdin_open: true

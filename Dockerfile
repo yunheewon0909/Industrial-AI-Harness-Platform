@@ -1,6 +1,9 @@
 FROM ubuntu:24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
+ARG CODEX_NPM_TAG=latest
+ARG OMX_NPM_TAG=latest
+ARG NPM_REFRESH=0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
@@ -16,7 +19,8 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npm install -g @openai/codex oh-my-codex
+RUN echo "NPM_REFRESH=${NPM_REFRESH}" \
+    && npm install -g "@openai/codex@${CODEX_NPM_TAG}" "oh-my-codex@${OMX_NPM_TAG}"
 
 RUN useradd -m -s /bin/bash dev
 

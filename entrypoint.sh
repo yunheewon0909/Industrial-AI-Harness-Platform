@@ -3,6 +3,8 @@ set -euo pipefail
 
 CODEX_HOME="${CODEX_HOME:-/home/dev/.codex}"
 COPY_MARKER="${CODEX_HOME}/.host_codex_copied_once"
+OMX_PROJECT_DIR="${OMX_PROJECT_DIR:-/workspace/.omx}"
+CODEX_CONFIG_FILE="${CODEX_HOME}/config.toml"
 
 echo "[entrypoint] Starting OMX sandbox bootstrap..."
 
@@ -38,6 +40,18 @@ if [[ -d /host-codex ]]; then
   fi
 else
   echo "[entrypoint] WARNING: /host-codex mount not found."
+fi
+
+if [[ -f "${CODEX_CONFIG_FILE}" ]]; then
+  if [[ -d "${OMX_PROJECT_DIR}/agents" ]]; then
+    if grep -Eq 'config_file = "/Users/[^"]+/.omx/agents/' "${CODEX_CONFIG_FILE}"; then
+      escaped_omx_dir="$(printf '%s' "${OMX_PROJECT_DIR}" | sed 's/[\/&]/\\&/g')"
+      sed -E -i "s|config_file = \"/Users/[^\"]+/.omx/agents/([^\"]+)\"|config_file = \"${escaped_omx_dir}/agents/\\1\"|g" "${CODEX_CONFIG_FILE}"
+      echo "[entrypoint] Rewrote OMX agent config paths to ${OMX_PROJECT_DIR}/agents."
+    fi
+  else
+    echo "[entrypoint] WARNING: ${OMX_PROJECT_DIR}/agents not found; skipped OMX path rewrite."
+  fi
 fi
 
 exec "$@"
