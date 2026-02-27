@@ -239,6 +239,15 @@ uv run --project apps/api pytest -q
 uv run --project apps/worker pytest -q
 ```
 
+### 7.6 Type-check (Pyright)
+
+Pyright 타입 체크는 uv가 관리하는 `.venv` 환경을 기준으로 실행한다.
+
+```bash
+uv sync --dev
+uv run pyright -p pyrightconfig.json
+```
+
 ## 8. 디렉토리 구조
 
 ```text

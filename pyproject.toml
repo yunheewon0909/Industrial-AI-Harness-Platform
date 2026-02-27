@@ -3,10 +3,23 @@ name = "industrial-ai-harness-platform"
 version = "0.1.0"
 description = "Week-1 MVP skeleton for Industrial AI Harness Platform"
 requires-python = "==3.11.*"
-dependencies = []
+dependencies = [
+  "industrial-ai-api",
+  "industrial-ai-worker",
+]
 
 [tool.uv.workspace]
 members = [
   "apps/api",
   "apps/worker",
+]
+
+[tool.uv.sources]
+industrial-ai-api = { workspace = true }
+industrial-ai-worker = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.408",
+    "pytest>=9.0.2",
 ]
