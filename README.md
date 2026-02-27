@@ -200,6 +200,13 @@ uv run --project apps/worker python -m worker.main
 
 ### 7.4 Compose(api/worker/postgres) 검증(선택)
 
+Compose 경로에서는 `api` 컨테이너가 시작 시 아래 순서로 자동 실행한다.
+
+1. `uv run alembic upgrade head`
+2. `uv run uvicorn api.main:app --host 0.0.0.0 --port 8000`
+
+따라서 7.2(호스트 단독 검증)과 달리 Compose에서는 수동 migration 명령을 별도로 실행할 필요가 없다.
+
 ```bash
 docker compose up --build
 
@@ -217,6 +224,7 @@ docker compose exec -T postgres psql -U postgres -d industrial_ai -c "select wor
 기대 로그(요약):
 
 - `postgres` healthy 상태 진입
+- `api` 로그에 `[api] running alembic upgrade head` 출력 후 migration 적용
 - `api` 서비스 기동 및 8000 포트 노출
 - `worker` heartbeat upsert 반복 출력
 - `jobs` 테이블 생성 확인

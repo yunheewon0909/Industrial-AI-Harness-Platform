@@ -29,7 +29,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["uv", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command:
+      [
+        "sh",
+        "-c",
+        "echo '[api] running alembic upgrade head' && uv run alembic upgrade head && uv run uvicorn api.main:app --host 0.0.0.0 --port 8000",
+      ]
     ports:
       - "8000:8000"
 
