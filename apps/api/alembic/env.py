@@ -6,6 +6,7 @@ from sqlalchemy import pool
 
 from api.config import get_settings
 from api.db import Base
+from api import models  # noqa: F401
 
 config = context.config
 

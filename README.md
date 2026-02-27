@@ -11,7 +11,7 @@ Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.
 
 ## 2. Week-1 범위
 
-- `apps/api`: FastAPI `/health`, `/jobs` + DB 설정 플럼빙 + Alembic 스캐폴드
+- `apps/api`: FastAPI `/health`, `/jobs`(DB 조회) + Alembic jobs 마이그레이션
 - `apps/worker`: 30초 heartbeat 출력
 - `shared/db/interface.py`: 다음 마일스톤용 DB 인터페이스 자리만 제공
 - `Dockerfile`, `entrypoint.sh`, `compose.omx.yml`: OMX 격리 샌드박스
@@ -23,7 +23,7 @@ Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.
 - [x] M1: OMX 도커 샌드박스 파일 + 호스트 검증
 - [x] M2: uv 기반 Python api/worker 스켈레톤
 - [x] M3: Postgres 서비스 + API DB 설정 플럼빙 + Alembic 스캐폴드
-- [ ] M4: Alembic jobs 마이그레이션 + `/jobs` DB 조회
+- [x] M4: Alembic jobs 마이그레이션 + `/jobs` DB 조회
 - [ ] M5: worker heartbeat DB upsert + retry/backoff
 
 ## 3. 아키텍처(초기)
@@ -167,18 +167,21 @@ docker compose -f compose.omx.yml run --rm omx-sandbox
 ```bash
 export API_DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/industrial_ai
 
+# jobs 테이블 migration 적용
+uv run --project apps/api alembic -c apps/api/alembic.ini upgrade head
+
 uv run --project apps/api uvicorn api.main:app --host 0.0.0.0 --port 8000
 curl -s http://127.0.0.1:8000/health
 curl -s http://127.0.0.1:8000/jobs
 
-# Alembic scaffold 확인(아직 migration 없음)
+# migration head 확인
 uv run --project apps/api alembic -c apps/api/alembic.ini heads
 ```
 
 기대 응답:
 
 - `/health` -> `{"status":"ok"}`
-- `/jobs` -> `[]`
+- `/jobs` -> `jobs` 테이블 조회 결과(JSON 배열)
 
 ### 7.3 Worker 단독 검증(호스트)
 
@@ -210,6 +213,7 @@ docker compose exec -T postgres psql -U postgres -d industrial_ai -c "\dt"
 - `postgres` healthy 상태 진입
 - `api` 서비스 기동 및 8000 포트 노출
 - `worker` heartbeat 반복 출력
+- `jobs` 테이블 생성 확인
 
 ## 8. 디렉토리 구조
 
@@ -232,9 +236,11 @@ docker compose exec -T postgres psql -U postgres -d industrial_ai -c "\dt"
 │   │   │   ├── env.py
 │   │   │   ├── script.py.mako
 │   │   │   └── versions/
+│   │   │       └── 20260227_0001_create_jobs_table.py
 │   │   └── src/api/
 │   │       ├── config.py
 │   │       ├── db.py
+│   │       ├── models.py
 │   │       └── main.py
 │   └── worker
 │       ├── pyproject.toml

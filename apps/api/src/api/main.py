@@ -1,6 +1,9 @@
 from fastapi import FastAPI
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from api.db import get_engine
+from api.models import JobRecord
 
 app = FastAPI(title="Industrial AI Harness API", version="0.1.0")
 
@@ -17,7 +20,12 @@ def health() -> dict[str, str]:
 
 @app.get("/jobs")
 def list_jobs() -> list[dict[str, str]]:
-    return []
+    with Session(get_engine()) as session:
+        jobs = session.scalars(
+            select(JobRecord).order_by(JobRecord.created_at.asc(), JobRecord.id.asc())
+        ).all()
+
+    return [{"id": job.id, "status": job.status} for job in jobs]
 
 
 def run() -> None:
