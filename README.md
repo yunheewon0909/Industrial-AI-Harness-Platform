@@ -106,15 +106,21 @@ CODEX_NPM_TAG=latest OMX_NPM_TAG=latest NPM_REFRESH=$(date +%s) docker compose -
 컨테이너 셸에 진입한 뒤 OMX 실행:
 
 ```bash
-omx setup --scope project
+omx setup --scope project-local
 omx --xhigh --madmax
+```
+
+프롬프트 카탈로그가 보이지 않으면 fallback으로 아래를 1회 실행한다.
+
+```bash
+omx setup --scope user
 ```
 
 참고:
 
 - 엔트리포인트가 `~/.codex/config.toml`의 호스트 절대경로(예: `/Users/.../.omx/agents/...`)를 컨테이너 경로 `/workspace/.omx/agents/...`로 자동 보정한다.
 - 따라서 호스트와 컨테이너를 오갈 때마다 `omx setup`을 매번 다시 할 필요는 없다.
-- 단, 프로젝트의 `.omx`를 지웠거나 컨테이너의 Codex 상태 볼륨(`omx-codex-home`)을 초기화한 경우에는 컨테이너에서 `omx setup --scope project`를 1회 다시 실행한다.
+- 단, 프로젝트의 `.omx`를 지웠거나 컨테이너의 Codex 상태 볼륨(`omx-codex-home`)을 초기화한 경우에는 컨테이너에서 `omx setup --scope project-local`을 1회 다시 실행한다.
 
 기대 로그(요약):
 
@@ -159,8 +165,8 @@ docker compose -f compose.omx.yml run --rm omx-sandbox
 
 주의:
 
-- 대상 프로젝트에 `.omx/agents`가 없으면 경로 보정은 스킵된다. 이 경우 컨테이너에서 `omx setup --scope project`를 1회 실행해 `.omx`를 먼저 생성한다.
-- `.omx`를 삭제했거나 `omx-codex-home` 볼륨을 초기화했다면, 역시 컨테이너에서 `omx setup --scope project`를 1회 다시 실행한다.
+- 대상 프로젝트에 `.omx/agents`가 없으면 경로 보정은 스킵된다. 이 경우 컨테이너에서 `omx setup --scope project-local`을 1회 실행해 `.omx`를 먼저 생성한다.
+- `.omx`를 삭제했거나 `omx-codex-home` 볼륨을 초기화했다면, 역시 컨테이너에서 `omx setup --scope project-local`을 1회 다시 실행한다.
 
 ### 7.2 API 단독 검증(호스트)
 
@@ -235,9 +241,13 @@ docker compose exec -T postgres psql -U postgres -d industrial_ai -c "select wor
 테스트는 Docker/Postgres 없이 로컬에서 실행 가능하다.
 
 ```bash
-uv run --project apps/api pytest -q
-uv run --project apps/worker pytest -q
+uv run --project apps/api pytest -q apps/api/tests
+uv run --project apps/worker pytest -q apps/worker/tests
 ```
+
+위처럼 각 테스트 루트를 명시하면 api/worker 간 테스트 교차 탐색을 막을 수 있다.
+특히 워크스페이스 루트에서 실행할 때도 의도한 스위트만 실행된다.
+검증 로그와 실패 지점을 서비스 단위로 분리해 추적하기 쉽다.
 
 ### 7.6 Type-check (Pyright)
 
@@ -247,6 +257,9 @@ Pyright 타입 체크는 uv가 관리하는 `.venv` 환경을 기준으로 실�
 uv sync --dev
 uv run pyright -p pyrightconfig.json
 ```
+
+`uvx --with pyright pyright ...`는 격리된 환경에서 실행되어 프로젝트 의존성을 보지 못할 수 있다.
+이 경우 missing-import 오탐이 발생할 수 있으므로 공식 검증 증거로 사용하지 않는다.
 
 ## 8. 디렉토리 구조
 
