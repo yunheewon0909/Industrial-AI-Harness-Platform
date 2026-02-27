@@ -1,6 +1,13 @@
 from fastapi import FastAPI
 
+from api.db import get_engine
+
 app = FastAPI(title="Industrial AI Harness API", version="0.1.0")
+
+
+@app.on_event("startup")
+def startup() -> None:
+    get_engine()
 
 
 @app.get("/health")
