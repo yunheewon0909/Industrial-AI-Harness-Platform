@@ -20,9 +20,12 @@ services:
     working_dir: /workspace/apps/api
     volumes:
       - ./:/workspace
+      - uv-venv-api:/tmp/uv-venv-api
     environment:
       API_DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/industrial_ai
       API_DB_ECHO: "false"
+      UV_PROJECT_ENVIRONMENT: /tmp/uv-venv-api
+      UV_CACHE_DIR: /tmp/uv-cache
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,10 +38,13 @@ services:
     working_dir: /workspace/apps/worker
     volumes:
       - ./:/workspace
+      - uv-venv-worker:/tmp/uv-venv-worker
     environment:
       WORKER_DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/industrial_ai
       WORKER_ID: worker-1
       WORKER_HEARTBEAT_SECONDS: "30"
+      UV_PROJECT_ENVIRONMENT: /tmp/uv-venv-worker
+      UV_CACHE_DIR: /tmp/uv-cache
     depends_on:
       postgres:
         condition: service_healthy
@@ -46,3 +52,5 @@ services:
 
 volumes:
   postgres-data:
+  uv-venv-api:
+  uv-venv-worker:

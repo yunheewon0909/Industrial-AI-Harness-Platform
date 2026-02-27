@@ -210,7 +210,8 @@ docker compose config --services
 docker compose logs --tail=120 postgres api worker
 
 # DB 스키마 확인
-docker compose exec -T postgres psql -U postgres -d industrial_ai -c "\dt"
+docker compose exec -T postgres psql -U postgres -d industrial_ai -c "\d worker_heartbeats"
+docker compose exec -T postgres psql -U postgres -d industrial_ai -c "select worker_id, updated_at from worker_heartbeats order by updated_at desc limit 3;"
 ```
 
 기대 로그(요약):
