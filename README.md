@@ -30,7 +30,7 @@ Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.
 ## 2.2 Week-2 RAG v1 진행 상태
 
 - [x] R1: `data/sample_docs` -> chunk -> embed -> `data/rag_index` ingestion
-- [x] R2: 로컬 인덱스 기반 `/rag/search` 조회 API
+- [x] R2 (accepted): 로컬 인덱스 기반 `/rag/search` 조회 API
 
 ## 3. 아키텍처(초기)
 
@@ -91,9 +91,34 @@ docker compose version
 
 ### 7.1 OMX 샌드박스
 
+`compose.omx.yml`의 서비스명은 `omx-sandbox`다.
+
 ```bash
 docker compose -f compose.omx.yml build
 docker compose -f compose.omx.yml run --rm omx-sandbox
+```
+
+샌드박스 이미지는 UTF-8 로케일(기본 `ko_KR.UTF-8`)을 강제로 설정하고, 진단용 `python3`/`python`을 포함한다.
+
+UTF-8 locale + python 진단(컨테이너 내부):
+
+```bash
+locale | grep -E '^(LANG|LC_ALL|LC_CTYPE)='
+python --version
+python3 --version
+python -c "print('한글 출력 테스트')"
+```
+
+캐시 무시 재빌드가 필요한 경우에만 `--no-cache`를 사용한다.
+
+```bash
+docker compose -f compose.omx.yml build --no-cache
+```
+
+orphan 컨테이너 정리는 `down/up` 계열에서만 `--remove-orphans`를 사용한다 (`run`에는 사용하지 않음).
+
+```bash
+docker compose -f compose.omx.yml down --remove-orphans
 ```
 
 `codex`와 `oh-my-codex`를 최신으로 강제 갱신하며 빌드하려면:
@@ -219,11 +244,21 @@ Compose 경로에서는 `api` 컨테이너가 시작 시 아래 순서로 자동
 
 따라서 7.2(호스트 단독 검증)과 달리 Compose에서는 수동 migration 명령을 별도로 실행할 필요가 없다.
 
+compose 기본 DSN 환경변수 이름은 아래와 같다.
+
+- API: `API_DATABASE_URL`
+- Worker: `WORKER_DATABASE_URL`
+
 ```bash
+# run on host
 docker compose up --build
 
 # 서비스명 확인
 docker compose config --services
+
+# HTTP 라우트 확인
+curl -s http://127.0.0.1:8000/health
+curl -s http://127.0.0.1:8000/jobs
 
 # 로그 확인 (서비스명은 postgres)
 docker compose logs --tail=120 postgres api worker
@@ -257,7 +292,7 @@ uv run --project apps/worker pytest -q apps/worker/tests
 
 ### 7.6 Type-check (Pyright)
 
-Pyright 타입 체크는 uv가 관리하는 `.venv` 환경을 기준으로 실행한다.
+Pyright의 canonical 검증 명령은 아래 2줄이다.
 
 ```bash
 uv sync --dev
@@ -284,7 +319,7 @@ find data/rag_index -maxdepth 3 -type f | sort
 
 ### 7.8 Week-2 R2 RAG search API (호스트, hermetic)
 
-R2는 R1에서 생성한 로컬 인덱스를 읽어 `/rag/search` 조회를 수행한다.
+R2는 R1에서 생성한 로컬 인덱스를 읽어 `GET /rag/search` 조회를 수행한다(포트 `8000`).
 
 ```bash
 # 1) 인덱스 생성
@@ -303,6 +338,7 @@ curl -sG "http://127.0.0.1:8000/rag/search" \
 
 - `/rag/search`가 `chunk_id`, `source_path`, `score`, `text` 필드를 포함한 JSON 배열 반환
 - 인덱스가 없으면 503 + `rag-ingest` 실행 안내 메시지 반환
+- Compose 실행 중에도 동일하게 `http://127.0.0.1:8000/rag/search`로 조회 가능
 
 ## 8. 디렉토리 구조
 
