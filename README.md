@@ -128,6 +128,19 @@ orphan 컨테이너 정리는 `down/up` 계열에서만 `--remove-orphans`를 �
 docker compose -f compose.omx.yml down --remove-orphans
 ```
 
+SSH agent 포워딩 문제(`ssh-add -l`가 `permission denied`)가 나오면 `compose.omx.yml`의 `omx-sandbox`에 아래 설정이 있어야 한다.
+
+```yaml
+group_add:
+  - "0"
+```
+
+검증(호스트):
+
+```bash
+docker compose -f compose.omx.yml run --rm omx-sandbox bash -lc 'ls -l $SSH_AUTH_SOCK; ssh-add -l'
+```
+
 `codex`와 `oh-my-codex`를 최신으로 강제 갱신하며 빌드하려면:
 
 ```bash

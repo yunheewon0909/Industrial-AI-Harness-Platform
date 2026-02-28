@@ -11,6 +11,8 @@ services:
     working_dir: /workspace
     stdin_open: true
     tty: true
+    group_add:
+      - "0"
     environment:
       CODEX_HOME: /home/dev/.codex
       SSH_AUTH_SOCK: /ssh-agent
