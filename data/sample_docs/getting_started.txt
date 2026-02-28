@@ -1,0 +1,5 @@
+Industrial AI Harness Platform RAG sample document.
+
+This sample describes the Week-2 R1 ingestion scope.
+The pipeline reads local documents, chunks content, computes deterministic embeddings,
+and writes index artifacts to a local directory.

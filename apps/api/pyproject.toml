@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 api = "api.main:run"
+rag-ingest = "api.ingest:main"
 
 [build-system]
 requires = ["hatchling>=1.25.0"]

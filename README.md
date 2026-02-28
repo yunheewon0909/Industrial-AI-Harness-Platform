@@ -16,6 +16,7 @@ Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.
 - `shared/db/interface.py`: 다음 마일스톤용 DB 인터페이스 자리만 제공
 - `Dockerfile`, `entrypoint.sh`, `compose.omx.yml`: OMX 격리 샌드박스
 - `compose.yml`: api/worker/postgres 최소 실행 골격
+- Week-2 R1: 로컬 RAG ingestion (`data/sample_docs` -> chunk -> embed -> `data/rag_index`)
 
 ## 2.1 마일스톤 진행 상태
 
@@ -261,6 +262,21 @@ uv run pyright -p pyrightconfig.json
 `uvx --with pyright pyright ...`는 격리된 환경에서 실행되어 프로젝트 의존성을 보지 못할 수 있다.
 이 경우 missing-import 오탐이 발생할 수 있으므로 공식 검증 증거로 사용하지 않는다.
 
+### 7.7 Week-2 R1 RAG ingestion (호스트, hermetic)
+
+기본 입력 경로는 `data/sample_docs`이며 `.txt`, `.md` 문서를 읽어 로컬 인덱스를 생성한다.
+
+```bash
+uv run --project apps/api rag-ingest
+find data/rag_index -maxdepth 3 -type f | sort
+```
+
+기대 결과(요약):
+
+- `[rag-ingest] completed documents=<N> chunks=<M> index=/workspace/data/rag_index/index.json`
+- `data/rag_index/index.json` 파일 생성
+- Docker/Compose 없이 호스트에서 단독 실행 가능
+
 ## 8. 디렉토리 구조
 
 ```text
@@ -287,11 +303,16 @@ uv run pyright -p pyrightconfig.json
 │   │   └── src/api/
 │   │       ├── config.py
 │   │       ├── db.py
+│   │       ├── ingest.py
 │   │       ├── models.py
-│   │       └── main.py
+│   │       ├── main.py
+│   │       └── services/rag/
 │   └── worker
 │       ├── pyproject.toml
 │       └── src/worker/main.py
+├── data
+│   ├── sample_docs/
+│   └── rag_index/ (runtime output, git ignored)
 └── shared
     └── db/interface.py
 ```
