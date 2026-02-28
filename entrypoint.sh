@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export LANG="${LANG:-ko_KR.UTF-8}"
+export LC_ALL="${LC_ALL:-ko_KR.UTF-8}"
+export LC_CTYPE="${LC_CTYPE:-ko_KR.UTF-8}"
+
 CODEX_HOME="${CODEX_HOME:-/home/dev/.codex}"
 COPY_MARKER="${CODEX_HOME}/.host_codex_copied_once"
 OMX_PROJECT_DIR="${OMX_PROJECT_DIR:-/workspace/.omx}"

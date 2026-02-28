@@ -98,7 +98,7 @@ docker compose -f compose.omx.yml build
 docker compose -f compose.omx.yml run --rm omx-sandbox
 ```
 
-샌드박스 이미지는 UTF-8 로케일(기본 `ko_KR.UTF-8`)을 강제로 설정하고, 진단용 `python3`/`python`을 포함한다.
+샌드박스 이미지는 빌드 시 `en_US.UTF-8`, `ko_KR.UTF-8`를 모두 생성하고 기본 로케일을 `ko_KR.UTF-8`로 고정한다. 또한 진단용 `python3`와 `python`(=`python3` symlink)을 포함한다.
 
 UTF-8 locale + python 진단(컨테이너 내부):
 
@@ -107,6 +107,13 @@ locale | grep -E '^(LANG|LC_ALL|LC_CTYPE)='
 python --version
 python3 --version
 python -c "print('한글 출력 테스트')"
+```
+
+호스트에서 한 번에 확인하려면:
+
+```bash
+docker compose -f compose.omx.yml build --no-cache
+docker compose -f compose.omx.yml run --rm omx-sandbox bash -lc 'locale | egrep "^(LANG|LC_ALL|LC_CTYPE)="; python -c "print(\"한글 테스트: 가나다라마바사\")"'
 ```
 
 캐시 무시 재빌드가 필요한 경우에만 `--no-cache`를 사용한다.

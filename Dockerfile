@@ -10,8 +10,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     git \
+    locales \
     openssh-client \
+    python3 \
+    python3-venv \
     tmux \
+    && sed -i 's/^# *\(en_US.UTF-8 UTF-8\)/\1/' /etc/locale.gen \
+    && sed -i 's/^# *\(ko_KR.UTF-8 UTF-8\)/\1/' /etc/locale.gen \
+    && locale-gen en_US.UTF-8 ko_KR.UTF-8 \
+    && update-locale LANG=ko_KR.UTF-8 LC_ALL=ko_KR.UTF-8 \
+    && ln -sf /usr/bin/python3 /usr/local/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
@@ -24,6 +32,8 @@ RUN echo "NPM_REFRESH=${NPM_REFRESH}" \
 
 RUN useradd -m -s /bin/bash dev
 
+ENV LANG=ko_KR.UTF-8
+ENV LC_ALL=ko_KR.UTF-8
 ENV CODEX_HOME=/home/dev/.codex
 WORKDIR /workspace
 
