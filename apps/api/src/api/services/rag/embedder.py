@@ -26,5 +26,9 @@ def _deterministic_embedding(text: str, *, dimensions: int) -> list[float]:
     return vector
 
 
+def embed_text(text: str, *, dimensions: int) -> list[float]:
+    return _deterministic_embedding(text, dimensions=dimensions)
+
+
 def embed_chunks(chunks: list[ChunkRecord], *, dimensions: int) -> list[list[float]]:
-    return [_deterministic_embedding(chunk.text, dimensions=dimensions) for chunk in chunks]
+    return [embed_text(chunk.text, dimensions=dimensions) for chunk in chunks]

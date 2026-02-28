@@ -22,3 +22,11 @@ class IngestionSummary:
     chunk_count: int
     output_dir: str
     index_file: str
+
+
+@dataclass(frozen=True)
+class QueryHit:
+    chunk_id: str
+    source_path: str
+    text: str
+    score: float

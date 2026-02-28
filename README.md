@@ -16,7 +16,7 @@ Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.
 - `shared/db/interface.py`: 다음 마일스톤용 DB 인터페이스 자리만 제공
 - `Dockerfile`, `entrypoint.sh`, `compose.omx.yml`: OMX 격리 샌드박스
 - `compose.yml`: api/worker/postgres 최소 실행 골격
-- Week-2 R1: 로컬 RAG ingestion (`data/sample_docs` -> chunk -> embed -> `data/rag_index`)
+- Week-2 R1-R2: 로컬 RAG ingestion + search API (`data/sample_docs` -> chunk/embed -> `data/rag_index`, `/rag/search`)
 
 ## 2.1 마일스톤 진행 상태
 
@@ -26,6 +26,11 @@ Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.
 - [x] M3: Postgres 서비스 + API DB 설정 플럼빙 + Alembic 스캐폴드
 - [x] M4: Alembic jobs 마이그레이션 + `/jobs` DB 조회
 - [x] M5: worker heartbeat DB upsert + retry/backoff
+
+## 2.2 Week-2 RAG v1 진행 상태
+
+- [x] R1: `data/sample_docs` -> chunk -> embed -> `data/rag_index` ingestion
+- [x] R2: 로컬 인덱스 기반 `/rag/search` 조회 API
 
 ## 3. 아키텍처(초기)
 
@@ -277,6 +282,28 @@ find data/rag_index -maxdepth 3 -type f | sort
 - `data/rag_index/index.json` 파일 생성
 - Docker/Compose 없이 호스트에서 단독 실행 가능
 
+### 7.8 Week-2 R2 RAG search API (호스트, hermetic)
+
+R2는 R1에서 생성한 로컬 인덱스를 읽어 `/rag/search` 조회를 수행한다.
+
+```bash
+# 1) 인덱스 생성
+uv run --project apps/api rag-ingest
+
+# 2) API 실행
+uv run --project apps/api uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+# 3) 검색 요청
+curl -sG "http://127.0.0.1:8000/rag/search" \
+  --data-urlencode "q=maintenance automation" \
+  --data-urlencode "k=3"
+```
+
+기대 결과(요약):
+
+- `/rag/search`가 `chunk_id`, `source_path`, `score`, `text` 필드를 포함한 JSON 배열 반환
+- 인덱스가 없으면 503 + `rag-ingest` 실행 안내 메시지 반환
+
 ## 8. 디렉토리 구조
 
 ```text
@@ -307,6 +334,9 @@ find data/rag_index -maxdepth 3 -type f | sort
 │   │       ├── models.py
 │   │       ├── main.py
 │   │       └── services/rag/
+│   │           ├── ingest.py
+│   │           ├── query.py
+│   │           └── ...
 │   └── worker
 │       ├── pyproject.toml
 │       └── src/worker/main.py
