@@ -5,8 +5,22 @@ from fastapi.testclient import TestClient
 
 from api.config import get_settings
 from api.llm import ChatResult, LLMClientError
-from api.main import app, get_llm_client
+from api.main import app, get_embedding_client, get_llm_client
 from api.services.rag.ingest import ingest_documents
+
+
+class FakeEmbeddingClient:
+    def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        vectors: list[list[float]] = []
+        for text in texts:
+            normalized = text.lower()
+            vectors.append(
+                [
+                    float(normalized.count("predictive") + normalized.count("maintenance")),
+                    float(normalized.count("automation")),
+                ]
+            )
+        return vectors
 
 
 class FakeLLMClient:
@@ -29,6 +43,7 @@ def test_ask_endpoint_returns_answer_sources_and_meta(
     tmp_path: Path,
 ) -> None:
     index_dir = tmp_path / "rag_index"
+    rag_db_path = index_dir / "rag.db"
     source_dir = tmp_path / "sample_docs"
     source_dir.mkdir(parents=True)
     (source_dir / "ops.md").write_text(
@@ -37,18 +52,20 @@ def test_ask_endpoint_returns_answer_sources_and_meta(
 
     ingest_documents(
         source_dir=source_dir,
-        output_dir=index_dir,
+        db_path=rag_db_path,
         chunk_size=120,
         chunk_overlap=20,
-        embedding_dim=16,
+        embedding_client=FakeEmbeddingClient(),
     )
 
     monkeypatch.setenv("RAG_INDEX_DIR", str(index_dir))
+    monkeypatch.setenv("RAG_DB_PATH", str(rag_db_path))
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434/v1")
     get_settings.cache_clear()
 
     fake_client = FakeLLMClient()
     app.dependency_overrides[get_llm_client] = lambda: fake_client
+    app.dependency_overrides[get_embedding_client] = lambda: FakeEmbeddingClient()
 
     try:
         response = client.post("/ask", json={"question": "What does the doc say?", "k": 2})
@@ -89,10 +106,12 @@ def test_ask_endpoint_without_index_returns_503(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("RAG_INDEX_DIR", str(tmp_path / "missing-index"))
+    monkeypatch.setenv("RAG_DB_PATH", str(tmp_path / "missing-index" / "rag.db"))
     get_settings.cache_clear()
 
     fake_client = FakeLLMClient()
     app.dependency_overrides[get_llm_client] = lambda: fake_client
+    app.dependency_overrides[get_embedding_client] = lambda: FakeEmbeddingClient()
 
     try:
         response = client.post("/ask", json={"question": "hello"})
@@ -110,22 +129,25 @@ def test_ask_endpoint_maps_llm_failure_to_502(
     tmp_path: Path,
 ) -> None:
     index_dir = tmp_path / "rag_index"
+    rag_db_path = index_dir / "rag.db"
     source_dir = tmp_path / "sample_docs"
     source_dir.mkdir(parents=True)
     (source_dir / "ops.md").write_text("factory context", encoding="utf-8")
 
     ingest_documents(
         source_dir=source_dir,
-        output_dir=index_dir,
+        db_path=rag_db_path,
         chunk_size=120,
         chunk_overlap=20,
-        embedding_dim=16,
+        embedding_client=FakeEmbeddingClient(),
     )
 
     monkeypatch.setenv("RAG_INDEX_DIR", str(index_dir))
+    monkeypatch.setenv("RAG_DB_PATH", str(rag_db_path))
     get_settings.cache_clear()
 
     app.dependency_overrides[get_llm_client] = lambda: FailingLLMClient()
+    app.dependency_overrides[get_embedding_client] = lambda: FakeEmbeddingClient()
 
     try:
         response = client.post("/ask", json={"question": "hello"})

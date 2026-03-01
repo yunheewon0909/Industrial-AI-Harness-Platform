@@ -16,7 +16,7 @@ Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.
 - `shared/db/interface.py`: 다음 마일스톤용 DB 인터페이스 자리만 제공
 - `Dockerfile`, `entrypoint.sh`, `compose.omx.yml`: OMX 격리 샌드박스
 - `compose.yml`: api/worker/postgres 최소 실행 골격
-- Week-2 R1-R3: 로컬 RAG ingestion + search + ask API (`data/sample_docs` -> chunk/embed -> `data/rag_index`, `/rag/search`, `/ask`)
+- Week-2 R1-R4: 로컬 RAG ingestion + search + ask API (`data/sample_docs` -> chunk/embed -> `data/rag_index/rag.db`, `/rag/search`, `/ask`)
 
 ## 2.1 마일스톤 진행 상태
 
@@ -32,6 +32,7 @@ Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.
 - [x] R1: `data/sample_docs` -> chunk -> embed -> `data/rag_index` ingestion
 - [x] R2 (accepted): 로컬 인덱스 기반 `/rag/search` 조회 API
 - [x] R3: `POST /ask` + Ollama(OpenAI-compatible) 생성 경로 + compose `ollama` 서비스
+- [x] R4: Ollama embeddings + SQLite(`rag.db`) 기반 retrieval 전환 (JSON fallback 1-release 호환)
 
 ## 3. 아키텍처(초기)
 
@@ -271,10 +272,15 @@ compose에서 명시적으로 사용하는 주요 환경변수:
 - Worker DB: `WORKER_DATABASE_URL`
 - RAG source dir (compose override): `RAG_SOURCE_DIR=/workspace/data/sample_docs`
 - RAG index dir (compose override): `RAG_INDEX_DIR=/workspace/data/rag_index`
+- RAG sqlite path (compose override): `RAG_DB_PATH=/workspace/data/rag_index/rag.db`
 - Ollama base URL: `OLLAMA_BASE_URL=http://ollama:11434/v1`
 - Ollama model: `OLLAMA_MODEL=qwen2.5:7b-instruct-q4_K_M`
 - Ollama fallback model: `OLLAMA_FALLBACK_MODEL=qwen2.5:3b-instruct-q4_K_M`
+- Ollama embed base URL: `OLLAMA_EMBED_BASE_URL=http://ollama:11434/v1`
+- Ollama embed model: `OLLAMA_EMBED_MODEL=nomic-embed-text`
 - Ollama timeout: `OLLAMA_TIMEOUT_SECONDS=60`
+
+`RAG_DB_PATH` 우선순위 규칙: `RAG_DB_PATH`가 설정되면 그 값을 사용하고, 비어있으면 `RAG_INDEX_DIR/rag.db`를 기본값으로 사용한다.
 
 ```bash
 # run on host
@@ -287,6 +293,8 @@ docker compose config --services
 docker compose exec -T ollama ollama pull qwen2.5:3b-instruct-q4_K_M
 # (선택) 기본 모델을 미리 받을 경우
 docker compose exec -T ollama ollama pull qwen2.5:7b-instruct-q4_K_M
+# embeddings 모델
+docker compose exec -T ollama ollama pull nomic-embed-text
 
 # HTTP 라우트 확인
 curl -s http://127.0.0.1:8000/health
@@ -340,9 +348,13 @@ uv run pyright -p pyrightconfig.json
 `uvx --with pyright pyright ...`는 격리된 환경에서 실행되어 프로젝트 의존성을 보지 못할 수 있다.
 이 경우 missing-import 오탐이 발생할 수 있으므로 공식 검증 증거로 사용하지 않는다.
 
-### 7.7 Week-2 R1 RAG ingestion (호스트, hermetic)
+### 7.7 Week-2 R1/R4 RAG ingestion (호스트, hermetic)
 
-기본 입력 경로는 `data/sample_docs`이며 `.txt`, `.md` 문서를 읽어 로컬 인덱스를 생성한다.
+기본 입력 경로는 `data/sample_docs`이며 `.txt`, `.md` 문서를 읽어 로컬 SQLite 인덱스(`rag.db`)를 생성한다.
+R4에서 retrieval 저장소를 JSON 파일에서 SQLite 단일 파일로 전환했다.
+
+- SQLite 선택 이유: 단일 파일 배포/백업이 쉽고, 문서/청크/벡터를 트랜잭션으로 일관되게 관리할 수 있다.
+- retrieval 계산은 현재 Python brute-force cosine(MVP/demo-scale)이며, ANN/kNN 최적화는 R5로 deferred.
 
 ```bash
 uv run --project apps/api rag-ingest
@@ -351,14 +363,30 @@ find data/rag_index -maxdepth 3 -type f | sort
 
 기대 결과(요약):
 
-- `[rag-ingest] completed documents=<N> chunks=<M> index=data/rag_index/index.json` (또는 절대경로 출력)
-- `data/rag_index/index.json` 파일 생성
+- `[rag-ingest] completed documents=<N> chunks=<M> index=data/rag_index/rag.db` (또는 절대경로 출력)
+- `data/rag_index/rag.db` 파일 생성
 - Docker/Compose 없이 호스트에서 단독 실행 가능
-- Compose 실행 시에는 `RAG_SOURCE_DIR`, `RAG_INDEX_DIR` 환경변수로 `/workspace/...` 경로를 명시 override한다.
+- Compose 실행 시에는 `RAG_SOURCE_DIR`, `RAG_INDEX_DIR`, `RAG_DB_PATH` 환경변수로 `/workspace/...` 경로를 명시 override한다.
 
-### 7.8 Week-2 R2 RAG search API (호스트, hermetic)
+Ollama embedding 모델 준비(최초 1회):
 
-R2는 R1에서 생성한 로컬 인덱스를 읽어 `GET /rag/search` 조회를 수행한다(포트 `8000`).
+```bash
+ollama pull nomic-embed-text
+```
+
+SQLite index 확인:
+
+```bash
+sqlite3 data/rag_index/rag.db "select count(*) as chunks from chunks;"
+
+# sqlite3 CLI가 없으면 python stdlib 대안
+python -c "import sqlite3; c=sqlite3.connect('data/rag_index/rag.db'); print(c.execute('select count(*) from chunks').fetchone()[0]); c.close()"
+```
+
+### 7.8 Week-2 R2/R4 RAG search API (호스트, hermetic)
+
+R2/R4는 로컬 SQLite 인덱스(`rag.db`)를 읽어 `GET /rag/search` 조회를 수행한다(포트 `8000`).
+호환성 윈도우(1 release) 동안 `rag.db`가 없고 기존 `index.json`만 있으면 fallback으로 JSON 인덱스를 읽는다.
 
 ```bash
 # 1) 인덱스 생성
@@ -376,12 +404,14 @@ curl -sG "http://127.0.0.1:8000/rag/search" \
 기대 결과(요약):
 
 - `/rag/search`가 `chunk_id`, `source_path`, `score`, `text` 필드를 포함한 JSON 배열 반환
-- 인덱스가 없으면 503 + `rag-ingest` 실행 안내 메시지 반환
+- `rag.db`가 없고 `index.json`이 있으면 JSON fallback으로 검색
+- 둘 다 없으면 503 + `rag-ingest` 실행 안내 메시지 반환
 - Compose 실행 중에도 동일하게 `http://127.0.0.1:8000/rag/search`로 조회 가능
 
 ### 7.9 Week-2 R3 `/ask` (RAG + Ollama, fully local)
 
-`POST /ask`는 기존 로컬 RAG 인덱스 검색 결과를 컨텍스트로 묶고, Ollama의 OpenAI-compatible chat completions API(`/v1/chat/completions`)를 호출해 답변을 생성한다.
+`POST /ask`는 로컬 RAG SQLite 인덱스 검색 결과를 컨텍스트로 묶고, Ollama의 OpenAI-compatible chat completions API(`/v1/chat/completions`)를 호출해 답변을 생성한다.
+검색 query embedding 생성에는 Ollama OpenAI-compatible embeddings API(`/v1/embeddings`)를 사용한다.
 
 요청/응답 요약:
 
@@ -394,16 +424,16 @@ curl -sG "http://127.0.0.1:8000/rag/search" \
 > **macOS Docker has no GPU passthrough; Ollama-in-Docker is CPU-only and slow; Metal acceleration requires host runtime; recommend LM Studio host when Metal/GUI needed.**
 
 - Compose 기본값은 `OLLAMA_BASE_URL=http://ollama:11434/v1` (컨테이너 내부 서비스 경로).
+- Embedding 기본값은 `OLLAMA_EMBED_BASE_URL=http://ollama:11434/v1`, `OLLAMA_EMBED_MODEL=nomic-embed-text`.
 - 호스트에서 Ollama/LM Studio를 띄우고 API 컨테이너가 이를 바라보게 하려면 fallback으로 아래를 사용:
   - `OLLAMA_BASE_URL=http://host.docker.internal:11434/v1`
+  - `OLLAMA_EMBED_BASE_URL=http://host.docker.internal:11434/v1`
 
 #### 7.9.2 MacBook Air M2 16GB 권장 모델
 
 - Chat (기본): `qwen2.5:7b-instruct-q4_K_M`
 - Chat fallback(메모리/속도 우선): `qwen2.5:3b-instruct-q4_K_M`
-- Embedding (향후 옵션 경로): `nomic-embed-text`
-
-> 참고: R3 범위에서는 R1/R2 deterministic embedding 인덱스를 그대로 사용한다. Ollama embedding 전환은 후속 마일스톤에서 선택적으로 추가한다.
+- Embedding: `nomic-embed-text`
 
 ## 8. 디렉토리 구조
 

@@ -26,9 +26,12 @@ services:
       API_DB_ECHO: "false"
       RAG_SOURCE_DIR: /workspace/data/sample_docs
       RAG_INDEX_DIR: /workspace/data/rag_index
+      RAG_DB_PATH: /workspace/data/rag_index/rag.db
       OLLAMA_BASE_URL: http://ollama:11434/v1
       OLLAMA_MODEL: qwen2.5:7b-instruct-q4_K_M
       OLLAMA_FALLBACK_MODEL: qwen2.5:3b-instruct-q4_K_M
+      OLLAMA_EMBED_BASE_URL: http://ollama:11434/v1
+      OLLAMA_EMBED_MODEL: nomic-embed-text
       OLLAMA_TIMEOUT_SECONDS: "60"
       UV_PROJECT_ENVIRONMENT: /tmp/uv-venv-api
       UV_CACHE_DIR: /tmp/uv-cache
@@ -65,6 +68,7 @@ services:
       WORKER_HEARTBEAT_SECONDS: "30"
       RAG_SOURCE_DIR: /workspace/data/sample_docs
       RAG_INDEX_DIR: /workspace/data/rag_index
+      RAG_DB_PATH: /workspace/data/rag_index/rag.db
       UV_PROJECT_ENVIRONMENT: /tmp/uv-venv-worker
       UV_CACHE_DIR: /tmp/uv-cache
     depends_on:

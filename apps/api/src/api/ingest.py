@@ -21,11 +21,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Source directory containing .txt/.md documents",
     )
     parser.add_argument(
-        "--index-dir",
-        default=settings.rag_index_dir,
-        help="Output directory for persisted index artifacts",
-    )
-    parser.add_argument(
         "--chunk-size",
         type=int,
         default=settings.rag_chunk_size,
@@ -38,10 +33,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Chunk overlap in characters",
     )
     parser.add_argument(
-        "--embedding-dim",
-        type=int,
-        default=settings.rag_embedding_dim,
-        help="Deterministic embedding dimension",
+        "--db-path",
+        default=settings.rag_db_path,
+        help="Output sqlite DB path for persisted index artifacts",
     )
     return parser
 
@@ -53,10 +47,9 @@ def main() -> None:
     try:
         summary = ingest_documents(
             source_dir=Path(args.source_dir),
-            output_dir=Path(args.index_dir),
+            db_path=Path(args.db_path),
             chunk_size=args.chunk_size,
             chunk_overlap=args.chunk_overlap,
-            embedding_dim=args.embedding_dim,
         )
     except Exception as exc:
         print(f"[rag-ingest] failed: {exc}", file=sys.stderr, flush=True)

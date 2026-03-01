@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from functools import lru_cache
 import os
+from pathlib import Path
 
 
 def _to_bool(value: str | None, *, default: bool) -> bool:
@@ -22,17 +23,23 @@ class Settings:
     db_echo: bool
     rag_source_dir: str
     rag_index_dir: str
+    rag_db_path: str
     rag_chunk_size: int
     rag_chunk_overlap: int
-    rag_embedding_dim: int
     ollama_base_url: str
     ollama_model: str
     ollama_fallback_model: str
+    ollama_embed_base_url: str
+    ollama_embed_model: str
     ollama_timeout_seconds: float
 
 
 @lru_cache
 def get_settings() -> Settings:
+    rag_index_dir = os.getenv("RAG_INDEX_DIR", "data/rag_index")
+    rag_db_path = os.getenv("RAG_DB_PATH", str(Path(rag_index_dir) / "rag.db"))
+    ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+
     return Settings(
         database_url=os.getenv(
             "API_DATABASE_URL",
@@ -42,12 +49,14 @@ def get_settings() -> Settings:
         # Host-friendly defaults are relative paths.
         # Containers override these via compose env to /workspace/... paths.
         rag_source_dir=os.getenv("RAG_SOURCE_DIR", "data/sample_docs"),
-        rag_index_dir=os.getenv("RAG_INDEX_DIR", "data/rag_index"),
+        rag_index_dir=rag_index_dir,
+        rag_db_path=rag_db_path,
         rag_chunk_size=_to_int(os.getenv("RAG_CHUNK_SIZE"), default=500, minimum=100),
         rag_chunk_overlap=_to_int(os.getenv("RAG_CHUNK_OVERLAP"), default=50, minimum=0),
-        rag_embedding_dim=_to_int(os.getenv("RAG_EMBEDDING_DIM"), default=32, minimum=8),
-        ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
+        ollama_base_url=ollama_base_url,
         ollama_model=os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct-q4_K_M"),
         ollama_fallback_model=os.getenv("OLLAMA_FALLBACK_MODEL", "qwen2.5:3b-instruct-q4_K_M"),
+        ollama_embed_base_url=os.getenv("OLLAMA_EMBED_BASE_URL", ollama_base_url),
+        ollama_embed_model=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"),
         ollama_timeout_seconds=float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "30")),
     )

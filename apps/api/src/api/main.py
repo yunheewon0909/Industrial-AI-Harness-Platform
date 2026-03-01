@@ -10,6 +10,7 @@ from api.config import get_settings
 from api.db import get_engine
 from api.llm import LLMClient, LLMClientError, OllamaChatClient
 from api.models import JobRecord
+from api.services.rag.embedding_client import EmbeddingClient, OllamaEmbeddingClient
 from api.services.rag import search_index
 
 app = FastAPI(title="Industrial AI Harness API", version="0.1.0")
@@ -37,6 +38,15 @@ def get_llm_client() -> LLMClient:
     )
 
 
+def get_embedding_client() -> EmbeddingClient:
+    settings = get_settings()
+    return OllamaEmbeddingClient(
+        base_url=settings.ollama_embed_base_url,
+        model=settings.ollama_embed_model,
+        timeout_seconds=settings.ollama_timeout_seconds,
+    )
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -53,7 +63,11 @@ def list_jobs() -> list[dict[str, str]]:
 
 
 @app.get("/rag/search")
-def rag_search(q: str, k: int = 3) -> list[dict[str, object]]:
+def rag_search(
+    q: str,
+    embedding_client: Annotated[EmbeddingClient, Depends(get_embedding_client)],
+    k: int = 3,
+) -> list[dict[str, object]]:
     if not q.strip():
         raise HTTPException(status_code=400, detail="q must not be empty")
 
@@ -63,8 +77,10 @@ def rag_search(q: str, k: int = 3) -> list[dict[str, object]]:
     try:
         hits = search_index(
             index_dir=Path(settings.rag_index_dir),
+            db_path=Path(settings.rag_db_path),
             query_text=q,
             top_k=top_k,
+            embedding_client=embedding_client,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -86,6 +102,7 @@ def rag_search(q: str, k: int = 3) -> list[dict[str, object]]:
 def ask(
     request: AskRequest,
     llm_client: Annotated[LLMClient, Depends(get_llm_client)],
+    embedding_client: Annotated[EmbeddingClient, Depends(get_embedding_client)],
 ) -> dict[str, Any]:
     question = request.question.strip()
     if not question:
@@ -94,7 +111,13 @@ def ask(
     settings = get_settings()
 
     try:
-        hits = search_index(index_dir=Path(settings.rag_index_dir), query_text=question, top_k=request.k)
+        hits = search_index(
+            index_dir=Path(settings.rag_index_dir),
+            db_path=Path(settings.rag_db_path),
+            query_text=question,
+            top_k=request.k,
+            embedding_client=embedding_client,
+        )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
