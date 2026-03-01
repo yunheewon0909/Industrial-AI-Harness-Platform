@@ -21,7 +21,8 @@ requires = ["hatchling>=1.25.0"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/api"]
+only-include = ["src/api"]
+sources = ["src"]
 
 [dependency-groups]
 dev = [
