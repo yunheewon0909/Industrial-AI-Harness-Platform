@@ -29,7 +29,7 @@ services:
       OLLAMA_BASE_URL: http://ollama:11434/v1
       OLLAMA_MODEL: qwen2.5:7b-instruct-q4_K_M
       OLLAMA_FALLBACK_MODEL: qwen2.5:3b-instruct-q4_K_M
-      OLLAMA_TIMEOUT_SECONDS: "30"
+      OLLAMA_TIMEOUT_SECONDS: "60"
       UV_PROJECT_ENVIRONMENT: /tmp/uv-venv-api
       UV_CACHE_DIR: /tmp/uv-cache
     depends_on:

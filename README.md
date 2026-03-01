@@ -274,7 +274,7 @@ compose에서 명시적으로 사용하는 주요 환경변수:
 - Ollama base URL: `OLLAMA_BASE_URL=http://ollama:11434/v1`
 - Ollama model: `OLLAMA_MODEL=qwen2.5:7b-instruct-q4_K_M`
 - Ollama fallback model: `OLLAMA_FALLBACK_MODEL=qwen2.5:3b-instruct-q4_K_M`
-- Ollama timeout: `OLLAMA_TIMEOUT_SECONDS=30`
+- Ollama timeout: `OLLAMA_TIMEOUT_SECONDS=60`
 
 ```bash
 # run on host
