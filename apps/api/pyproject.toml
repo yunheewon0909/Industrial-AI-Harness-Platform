@@ -6,6 +6,7 @@ requires-python = "==3.11.*"
 dependencies = [
   "alembic>=1.16.0,<2.0.0",
   "fastapi>=0.115.0,<1.0.0",
+  "httpx>=0.28.1,<1.0.0",
   "psycopg[binary]>=3.2.0,<4.0.0",
   "sqlalchemy>=2.0.0,<3.0.0",
   "uvicorn>=0.30.0,<1.0.0",
@@ -24,6 +25,5 @@ packages = ["src/api"]
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.1",
     "pytest>=9.0.2",
 ]

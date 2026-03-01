@@ -24,11 +24,17 @@ services:
     environment:
       API_DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/industrial_ai
       API_DB_ECHO: "false"
+      OLLAMA_BASE_URL: http://ollama:11434/v1
+      OLLAMA_MODEL: qwen2.5:7b-instruct-q4_K_M
+      OLLAMA_FALLBACK_MODEL: qwen2.5:3b-instruct-q4_K_M
+      OLLAMA_TIMEOUT_SECONDS: "30"
       UV_PROJECT_ENVIRONMENT: /tmp/uv-venv-api
       UV_CACHE_DIR: /tmp/uv-cache
     depends_on:
       postgres:
         condition: service_healthy
+      ollama:
+        condition: service_started
     command:
       [
         "sh",
@@ -37,6 +43,13 @@ services:
       ]
     ports:
       - "8000:8000"
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
 
   worker:
     image: ghcr.io/astral-sh/uv:python3.11-bookworm
@@ -59,3 +72,4 @@ volumes:
   postgres-data:
   uv-venv-api:
   uv-venv-worker:
+  ollama-data:

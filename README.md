@@ -16,7 +16,7 @@ Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.
 - `shared/db/interface.py`: 다음 마일스톤용 DB 인터페이스 자리만 제공
 - `Dockerfile`, `entrypoint.sh`, `compose.omx.yml`: OMX 격리 샌드박스
 - `compose.yml`: api/worker/postgres 최소 실행 골격
-- Week-2 R1-R2: 로컬 RAG ingestion + search API (`data/sample_docs` -> chunk/embed -> `data/rag_index`, `/rag/search`)
+- Week-2 R1-R3: 로컬 RAG ingestion + search + ask API (`data/sample_docs` -> chunk/embed -> `data/rag_index`, `/rag/search`, `/ask`)
 
 ## 2.1 마일스톤 진행 상태
 
@@ -31,6 +31,7 @@ Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.
 
 - [x] R1: `data/sample_docs` -> chunk -> embed -> `data/rag_index` ingestion
 - [x] R2 (accepted): 로컬 인덱스 기반 `/rag/search` 조회 API
+- [x] R3: `POST /ask` + Ollama(OpenAI-compatible) 생성 경로 + compose `ollama` 서비스
 
 ## 3. 아키텍처(초기)
 
@@ -255,7 +256,7 @@ uv run --project apps/worker python -m worker.main
 - `worker_heartbeats` 테이블에 upsert heartbeat 수행
 - DB 오류 시 exponential backoff + jitter로 재시도
 
-### 7.4 Compose(api/worker/postgres) 검증(선택)
+### 7.4 Compose(postgres/api/worker/ollama) 검증(선택)
 
 Compose 경로에서는 `api` 컨테이너가 시작 시 아래 순서로 자동 실행한다.
 
@@ -264,10 +265,14 @@ Compose 경로에서는 `api` 컨테이너가 시작 시 아래 순서로 자동
 
 따라서 7.2(호스트 단독 검증)과 달리 Compose에서는 수동 migration 명령을 별도로 실행할 필요가 없다.
 
-compose 기본 DSN 환경변수 이름은 아래와 같다.
+compose에서 명시적으로 사용하는 주요 환경변수:
 
-- API: `API_DATABASE_URL`
-- Worker: `WORKER_DATABASE_URL`
+- API DB: `API_DATABASE_URL`
+- Worker DB: `WORKER_DATABASE_URL`
+- Ollama base URL: `OLLAMA_BASE_URL=http://ollama:11434/v1`
+- Ollama model: `OLLAMA_MODEL=qwen2.5:7b-instruct-q4_K_M`
+- Ollama fallback model: `OLLAMA_FALLBACK_MODEL=qwen2.5:3b-instruct-q4_K_M`
+- Ollama timeout: `OLLAMA_TIMEOUT_SECONDS=30`
 
 ```bash
 # run on host
@@ -276,12 +281,23 @@ docker compose up --build
 # 서비스명 확인
 docker compose config --services
 
+# 모델 warm-up (초회 1회 권장; pull이 끝나야 /ask 응답이 빠르게 안정화됨)
+docker compose exec -T ollama ollama pull qwen2.5:3b-instruct-q4_K_M
+# (선택) 기본 모델을 미리 받을 경우
+docker compose exec -T ollama ollama pull qwen2.5:7b-instruct-q4_K_M
+
 # HTTP 라우트 확인
 curl -s http://127.0.0.1:8000/health
 curl -s http://127.0.0.1:8000/jobs
+curl -sG "http://127.0.0.1:8000/rag/search" \
+  --data-urlencode "q=maintenance automation" \
+  --data-urlencode "k=3"
+curl -s -X POST "http://127.0.0.1:8000/ask" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What maintenance actions are recommended?","k":3}'
 
-# 로그 확인 (서비스명은 postgres)
-docker compose logs --tail=120 postgres api worker
+# 로그 확인
+docker compose logs --tail=120 postgres api worker ollama
 
 # DB 스키마 확인
 docker compose exec -T postgres psql -U postgres -d industrial_ai -c "\d worker_heartbeats"
@@ -294,8 +310,8 @@ docker compose exec -T postgres psql -U postgres -d industrial_ai -c "select wor
 - `api` 로그에 `[api] running alembic upgrade head` 출력 후 migration 적용
 - `api` 서비스 기동 및 8000 포트 노출
 - `worker` heartbeat upsert 반복 출력
-- `jobs` 테이블 생성 확인
-- `worker_heartbeats` 테이블 생성 확인
+- `ollama` 서비스 기동 (11434 포트)
+- `/ask` 응답 JSON에 `answer`, `sources`, `meta` 필드 포함
 
 ### 7.5 How to run tests
 
@@ -359,6 +375,32 @@ curl -sG "http://127.0.0.1:8000/rag/search" \
 - `/rag/search`가 `chunk_id`, `source_path`, `score`, `text` 필드를 포함한 JSON 배열 반환
 - 인덱스가 없으면 503 + `rag-ingest` 실행 안내 메시지 반환
 - Compose 실행 중에도 동일하게 `http://127.0.0.1:8000/rag/search`로 조회 가능
+
+### 7.9 Week-2 R3 `/ask` (RAG + Ollama, fully local)
+
+`POST /ask`는 기존 로컬 RAG 인덱스 검색 결과를 컨텍스트로 묶고, Ollama의 OpenAI-compatible chat completions API(`/v1/chat/completions`)를 호출해 답변을 생성한다.
+
+요청/응답 요약:
+
+- Request: `{"question":"...", "k":3}` (`question` 필드명 고정)
+- Response: `{"answer": "...", "sources": [...], "meta": {...}}`
+- `sources`에는 `chunk_id`, `source_path`, `score`, `text`가 포함된다.
+
+#### 7.9.1 macOS 런타임 선택: Ollama vs LM Studio
+
+> **macOS Docker has no GPU passthrough; Ollama-in-Docker is CPU-only and slow; Metal acceleration requires host runtime; recommend LM Studio host when Metal/GUI needed.**
+
+- Compose 기본값은 `OLLAMA_BASE_URL=http://ollama:11434/v1` (컨테이너 내부 서비스 경로).
+- 호스트에서 Ollama/LM Studio를 띄우고 API 컨테이너가 이를 바라보게 하려면 fallback으로 아래를 사용:
+  - `OLLAMA_BASE_URL=http://host.docker.internal:11434/v1`
+
+#### 7.9.2 MacBook Air M2 16GB 권장 모델
+
+- Chat (기본): `qwen2.5:7b-instruct-q4_K_M`
+- Chat fallback(메모리/속도 우선): `qwen2.5:3b-instruct-q4_K_M`
+- Embedding (향후 옵션 경로): `nomic-embed-text`
+
+> 참고: R3 범위에서는 R1/R2 deterministic embedding 인덱스를 그대로 사용한다. Ollama embedding 전환은 후속 마일스톤에서 선택적으로 추가한다.
 
 ## 8. 디렉토리 구조
 

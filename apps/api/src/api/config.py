@@ -25,6 +25,10 @@ class Settings:
     rag_chunk_size: int
     rag_chunk_overlap: int
     rag_embedding_dim: int
+    ollama_base_url: str
+    ollama_model: str
+    ollama_fallback_model: str
+    ollama_timeout_seconds: float
 
 
 @lru_cache
@@ -40,4 +44,8 @@ def get_settings() -> Settings:
         rag_chunk_size=_to_int(os.getenv("RAG_CHUNK_SIZE"), default=500, minimum=100),
         rag_chunk_overlap=_to_int(os.getenv("RAG_CHUNK_OVERLAP"), default=50, minimum=0),
         rag_embedding_dim=_to_int(os.getenv("RAG_EMBEDDING_DIM"), default=32, minimum=8),
+        ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1"),
+        ollama_model=os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct-q4_K_M"),
+        ollama_fallback_model=os.getenv("OLLAMA_FALLBACK_MODEL", "qwen2.5:3b-instruct-q4_K_M"),
+        ollama_timeout_seconds=float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "30")),
     )
