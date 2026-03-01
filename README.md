@@ -269,6 +269,8 @@ compose에서 명시적으로 사용하는 주요 환경변수:
 
 - API DB: `API_DATABASE_URL`
 - Worker DB: `WORKER_DATABASE_URL`
+- RAG source dir (compose override): `RAG_SOURCE_DIR=/workspace/data/sample_docs`
+- RAG index dir (compose override): `RAG_INDEX_DIR=/workspace/data/rag_index`
 - Ollama base URL: `OLLAMA_BASE_URL=http://ollama:11434/v1`
 - Ollama model: `OLLAMA_MODEL=qwen2.5:7b-instruct-q4_K_M`
 - Ollama fallback model: `OLLAMA_FALLBACK_MODEL=qwen2.5:3b-instruct-q4_K_M`
@@ -349,9 +351,10 @@ find data/rag_index -maxdepth 3 -type f | sort
 
 기대 결과(요약):
 
-- `[rag-ingest] completed documents=<N> chunks=<M> index=/workspace/data/rag_index/index.json`
+- `[rag-ingest] completed documents=<N> chunks=<M> index=data/rag_index/index.json` (또는 절대경로 출력)
 - `data/rag_index/index.json` 파일 생성
 - Docker/Compose 없이 호스트에서 단독 실행 가능
+- Compose 실행 시에는 `RAG_SOURCE_DIR`, `RAG_INDEX_DIR` 환경변수로 `/workspace/...` 경로를 명시 override한다.
 
 ### 7.8 Week-2 R2 RAG search API (호스트, hermetic)
 

@@ -24,6 +24,8 @@ services:
     environment:
       API_DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/industrial_ai
       API_DB_ECHO: "false"
+      RAG_SOURCE_DIR: /workspace/data/sample_docs
+      RAG_INDEX_DIR: /workspace/data/rag_index
       OLLAMA_BASE_URL: http://ollama:11434/v1
       OLLAMA_MODEL: qwen2.5:7b-instruct-q4_K_M
       OLLAMA_FALLBACK_MODEL: qwen2.5:3b-instruct-q4_K_M
@@ -61,6 +63,8 @@ services:
       WORKER_DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/industrial_ai
       WORKER_ID: worker-1
       WORKER_HEARTBEAT_SECONDS: "30"
+      RAG_SOURCE_DIR: /workspace/data/sample_docs
+      RAG_INDEX_DIR: /workspace/data/rag_index
       UV_PROJECT_ENVIRONMENT: /tmp/uv-venv-worker
       UV_CACHE_DIR: /tmp/uv-cache
     depends_on:

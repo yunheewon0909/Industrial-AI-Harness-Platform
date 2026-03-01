@@ -39,8 +39,10 @@ def get_settings() -> Settings:
             "postgresql+psycopg://postgres:postgres@localhost:5432/industrial_ai",
         ),
         db_echo=_to_bool(os.getenv("API_DB_ECHO"), default=False),
-        rag_source_dir=os.getenv("RAG_SOURCE_DIR", "/workspace/data/sample_docs"),
-        rag_index_dir=os.getenv("RAG_INDEX_DIR", "/workspace/data/rag_index"),
+        # Host-friendly defaults are relative paths.
+        # Containers override these via compose env to /workspace/... paths.
+        rag_source_dir=os.getenv("RAG_SOURCE_DIR", "data/sample_docs"),
+        rag_index_dir=os.getenv("RAG_INDEX_DIR", "data/rag_index"),
         rag_chunk_size=_to_int(os.getenv("RAG_CHUNK_SIZE"), default=500, minimum=100),
         rag_chunk_overlap=_to_int(os.getenv("RAG_CHUNK_OVERLAP"), default=50, minimum=0),
         rag_embedding_dim=_to_int(os.getenv("RAG_EMBEDDING_DIM"), default=32, minimum=8),
