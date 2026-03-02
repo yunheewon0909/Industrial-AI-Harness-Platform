@@ -54,7 +54,7 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      - ollama-data:/root/.ollama
+      - ollama-models:/root/.ollama
 
   worker:
     image: ghcr.io/astral-sh/uv:python3.11-bookworm
@@ -87,4 +87,5 @@ volumes:
   postgres-data:
   uv-venv-api:
   uv-venv-worker:
-  ollama-data:
+  ollama-models:
+    external: true

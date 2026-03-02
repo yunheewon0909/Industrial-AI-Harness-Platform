@@ -319,6 +319,13 @@ compose에서 명시적으로 사용하는 주요 환경변수:
 
 `RAG_DB_PATH` 우선순위 규칙: `RAG_DB_PATH`가 설정되면 그 값을 사용하고, 비어있으면 `RAG_INDEX_DIR/rag.db`를 기본값으로 사용한다.
 
+Ollama 모델 영속성:
+
+- compose는 `/root/.ollama`를 외부 볼륨 `ollama-models`에 마운트한다.
+- 모델 보존이 필요하면 `docker compose down -v`를 사용하지 말고 `docker compose down --remove-orphans`를 사용한다.
+- 최초 1회 볼륨 생성:
+  - `docker volume create ollama-models || true`
+
 ```bash
 # run on host
 docker compose up --build
