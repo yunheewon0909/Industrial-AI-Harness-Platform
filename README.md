@@ -242,12 +242,45 @@ uv run --project apps/api alembic -c apps/api/alembic.ini heads
 - `/health` -> `{"status":"ok"}`
 - `/jobs` -> `jobs` 테이블 조회 결과(JSON 배열)
 
+### 7.2.1 Reindex Job Queue API
+
+`POST /rag/reindex`는 `type=rag_reindex` job을 큐에 넣고 worker가 백그라운드 실행합니다.
+
+```bash
+# enqueue (empty body)
+curl -sS -X POST http://127.0.0.1:8000/rag/reindex
+
+# enqueue with optional payload_json
+curl -sS -X POST http://127.0.0.1:8000/rag/reindex \
+  -H "Content-Type: application/json" \
+  -d '{"payload_json":{"requested_by":"manual","notes":"nightly full rebuild"}}'
+
+# duplicate queued/running job exists -> 409
+curl -sS -X POST http://127.0.0.1:8000/rag/reindex
+# {"detail":"rag_reindex already queued/running","existing_job_id":"..."}
+
+# list/filter
+curl -sS "http://127.0.0.1:8000/jobs?type=rag_reindex&status=queued"
+
+# detail
+curl -sS http://127.0.0.1:8000/jobs/<job_id>
+```
+
+Worker 로그에서 poll/claim/execution 상태를 확인합니다.
+
+```bash
+docker compose logs --tail=200 worker
+```
+
 ### 7.3 Worker 단독 검증(호스트)
 
 ```bash
 export WORKER_DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/industrial_ai
 export WORKER_ID=worker-local
 export WORKER_HEARTBEAT_SECONDS=30
+export WORKER_POLL_SECONDS=5
+export JOB_MAX_ATTEMPTS=3
+export WORKER_API_PROJECT_DIR=/workspace/apps/api
 
 uv run --project apps/worker python -m worker.main
 ```
@@ -270,9 +303,13 @@ compose에서 명시적으로 사용하는 주요 환경변수:
 
 - API DB: `API_DATABASE_URL`
 - Worker DB: `WORKER_DATABASE_URL`
+- Worker poll interval: `WORKER_POLL_SECONDS` (default `5`)
+- Worker retry cap fallback: `JOB_MAX_ATTEMPTS` (default `3`)
+- Worker API project path for subprocess runner: `WORKER_API_PROJECT_DIR`
 - RAG source dir (compose override): `RAG_SOURCE_DIR=/workspace/data/sample_docs`
 - RAG index dir (compose override): `RAG_INDEX_DIR=/workspace/data/rag_index`
 - RAG sqlite path (compose override): `RAG_DB_PATH=/workspace/data/rag_index/rag.db`
+- Worker Ollama env for subprocess runner: `OLLAMA_BASE_URL`, `OLLAMA_EMBED_BASE_URL`, `OLLAMA_EMBED_MODEL`
 - Ollama base URL: `OLLAMA_BASE_URL=http://ollama:11434/v1`
 - Ollama model: `OLLAMA_MODEL=qwen2.5:7b-instruct-q4_K_M`
 - Ollama fallback model: `OLLAMA_FALLBACK_MODEL=qwen2.5:3b-instruct-q4_K_M`

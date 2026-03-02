@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 
 from api.config import get_settings
-from api.services.rag import ingest_documents
+from api.services.rag.reindex_job_runner import run_reindex_job
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -45,7 +45,7 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        summary = ingest_documents(
+        metrics = run_reindex_job(
             source_dir=Path(args.source_dir),
             db_path=Path(args.db_path),
             chunk_size=args.chunk_size,
@@ -57,9 +57,9 @@ def main() -> None:
 
     print(
         "[rag-ingest] completed "
-        f"documents={summary.document_count} "
-        f"chunks={summary.chunk_count} "
-        f"index={summary.index_file}",
+        f"documents={metrics['documents']} "
+        f"chunks={metrics['chunks']} "
+        f"db_path={metrics['db_path']}",
         flush=True,
     )
 

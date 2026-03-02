@@ -1,7 +1,11 @@
+from datetime import datetime, timezone
+import json
+import re
 from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,6 +25,12 @@ class AskRequest(BaseModel):
 
     question: str = Field(min_length=1)
     k: int = Field(default=3, ge=1, le=20)
+
+
+class ReindexEnqueueRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    payload_json: dict[str, Any] | None = None
 
 
 @app.on_event("startup")
@@ -47,19 +57,142 @@ def get_embedding_client() -> EmbeddingClient:
     )
 
 
+def _to_iso(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat()
+
+
+def _job_summary(job: JobRecord) -> dict[str, Any]:
+    return {
+        "id": job.id,
+        "type": job.type,
+        "status": job.status,
+    }
+
+
+def _job_detail(job: JobRecord) -> dict[str, Any]:
+    payload_json = job.payload_json
+    if isinstance(payload_json, str):
+        try:
+            parsed_payload = json.loads(payload_json)
+        except json.JSONDecodeError:
+            parsed_payload = None
+        else:
+            payload_json = parsed_payload if isinstance(parsed_payload, dict) else None
+
+    result_json = job.result_json
+    if isinstance(result_json, str):
+        try:
+            parsed_result = json.loads(result_json)
+        except json.JSONDecodeError:
+            parsed_result = None
+        else:
+            result_json = parsed_result if isinstance(parsed_result, dict) else None
+
+    return {
+        "id": job.id,
+        "type": job.type,
+        "status": job.status,
+        "payload_json": payload_json,
+        "attempts": job.attempts,
+        "max_attempts": job.max_attempts,
+        "created_at": _to_iso(job.created_at),
+        "updated_at": _to_iso(job.updated_at),
+        "started_at": _to_iso(job.started_at),
+        "finished_at": _to_iso(job.finished_at),
+        "error": job.error,
+        "result_json": result_json,
+    }
+
+
+def _extract_numeric_suffix(value: str) -> int | None:
+    match = re.search(r"(\d+)$", value)
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
+def _next_job_id(session: Session) -> str:
+    next_id = 1
+    for existing_id in session.scalars(select(JobRecord.id)).all():
+        parsed = _extract_numeric_suffix(str(existing_id))
+        if parsed is None:
+            continue
+        next_id = max(next_id, parsed + 1)
+    return str(next_id)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/jobs")
-def list_jobs() -> list[dict[str, str]]:
+@app.post("/rag/reindex")
+def enqueue_rag_reindex(request: ReindexEnqueueRequest | None = None) -> JSONResponse:
+    payload_json = request.payload_json if request is not None else None
+
     with Session(get_engine()) as session:
+        existing = session.scalar(
+            select(JobRecord)
+            .where(JobRecord.type == "rag_reindex")
+            .where(JobRecord.status.in_(["queued", "running"]))
+            .order_by(JobRecord.created_at.asc(), JobRecord.id.asc())
+            .limit(1)
+        )
+        if existing is not None:
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "detail": "rag_reindex already queued/running",
+                    "existing_job_id": existing.id,
+                },
+            )
+
+        job = JobRecord(
+            id=_next_job_id(session),
+            type="rag_reindex",
+            status="queued",
+            payload_json=payload_json,
+            attempts=0,
+            max_attempts=3,
+            updated_at=datetime.now(timezone.utc),
+        )
+        session.add(job)
+        session.commit()
+        job_id = job.id
+        job_status = job.status
+
+    return JSONResponse(status_code=202, content={"job_id": job_id, "status": job_status})
+
+
+@app.get("/jobs")
+def list_jobs(
+    type: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+) -> list[dict[str, Any]]:
+    with Session(get_engine()) as session:
+        stmt = select(JobRecord)
+        if type is not None:
+            stmt = stmt.where(JobRecord.type == type)
+        if status is not None:
+            stmt = stmt.where(JobRecord.status == status)
+
         jobs = session.scalars(
-            select(JobRecord).order_by(JobRecord.created_at.asc(), JobRecord.id.asc())
+            stmt.order_by(JobRecord.created_at.asc(), JobRecord.id.asc())
         ).all()
 
-    return [{"id": job.id, "status": job.status} for job in jobs]
+    return [_job_summary(job) for job in jobs]
+
+
+@app.get("/jobs/{job_id}")
+def get_job(job_id: str) -> dict[str, Any]:
+    with Session(get_engine()) as session:
+        job = session.get(JobRecord, job_id)
+
+    if job is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return _job_detail(job)
 
 
 @app.get("/rag/search")
