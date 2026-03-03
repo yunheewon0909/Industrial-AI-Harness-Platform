@@ -63,6 +63,25 @@ def test_enqueue_rag_reindex_incremental_creates_incremental_job(client: TestCli
     assert job.status == "queued"
 
 
+def test_enqueue_rag_reindex_incremental_with_payload_still_uses_incremental_type(
+    client: TestClient,
+) -> None:
+    response = client.post(
+        "/rag/reindex?mode=incremental",
+        json={"payload_json": {"requested_by": "test"}},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+
+    with Session(get_engine()) as session:
+        job = session.get(JobRecord, body["job_id"])
+
+    assert job is not None
+    assert job.type == "rag_reindex_incremental"
+    assert job.payload_json == {"requested_by": "test"}
+
+
 def test_enqueue_rag_reindex_rejects_invalid_mode(client: TestClient) -> None:
     response = client.post("/rag/reindex?mode=invalid")
 

@@ -295,6 +295,29 @@ curl -sS "http://127.0.0.1:8000/jobs?type=rag_reindex_incremental&status=queued"
 curl -sS http://127.0.0.1:8000/jobs/<job_id>
 ```
 
+incremental enqueue 검증(권장):
+
+```bash
+# 1) incremental enqueue
+response=$(curl -sS -X POST 'http://127.0.0.1:8000/rag/reindex?mode=incremental')
+echo "$response"
+
+# 2) returned job_id 확인 (jq 없는 환경은 수동 복사)
+job_id=$(echo "$response" | jq -r '.job_id')
+
+# 3) job detail에서 type 확인
+curl -sS "http://127.0.0.1:8000/jobs/${job_id}"
+# 기대: "type":"rag_reindex_incremental"
+
+# 4) result_json 확인
+# 기대 필드: unchanged / new / updated / removed / documents_total_after / chunks_total_after
+```
+
+참고:
+
+- `GET /jobs?type=rag_reindex_incremental`가 계속 빈 배열이면 mode 매핑이 깨졌을 가능성이 있다.
+- 현재 버전에서는 `mode=incremental` -> `type=rag_reindex_incremental`로 enqueue되도록 수정되어 있다.
+
 Worker 로그에서 poll/claim/execution 상태를 확인합니다.
 
 ```bash
@@ -420,7 +443,7 @@ Ollama 모델 영속성:
 
 ```bash
 # run on host
-docker compose up --build
+docker compose up -d --build
 
 # 서비스명 확인
 docker compose config --services
@@ -443,7 +466,7 @@ curl -s -X POST "http://127.0.0.1:8000/ask" \
   -d '{"question":"What maintenance actions are recommended?","k":3}'
 
 # 로그 확인
-docker compose logs --tail=120 postgres api worker ollama
+docker compose logs -f --tail=120 worker
 
 # DB 스키마 확인
 docker compose exec -T postgres psql -U postgres -d industrial_ai -c "\d worker_heartbeats"

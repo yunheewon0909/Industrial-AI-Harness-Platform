@@ -33,6 +33,12 @@ class ReindexEnqueueRequest(BaseModel):
     payload_json: dict[str, Any] | None = None
 
 
+def _job_type_for_reindex_mode(mode: Literal["full", "incremental"]) -> str:
+    if mode == "incremental":
+        return "rag_reindex_incremental"
+    return "rag_reindex"
+
+
 def _enqueue_job(
     *,
     job_type: str,
@@ -176,7 +182,7 @@ def enqueue_rag_reindex(
     mode: Literal["full", "incremental"] = Query(default="full"),
 ) -> JSONResponse:
     payload_json = request.payload_json if request is not None else None
-    job_type = "rag_reindex_incremental" if mode == "incremental" else "rag_reindex"
+    job_type = _job_type_for_reindex_mode(mode)
     return _enqueue_job(job_type=job_type, payload_json=payload_json)
 
 
