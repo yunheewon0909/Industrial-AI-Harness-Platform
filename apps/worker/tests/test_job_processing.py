@@ -183,6 +183,37 @@ def test_worker_retries_verify_job_and_marks_failed(tmp_path) -> None:
     assert "verify-failed" in str(row[2])
 
 
+def test_worker_claims_and_processes_incremental_job(tmp_path) -> None:
+    engine = create_engine(f"sqlite+pysqlite:///{tmp_path / 'worker-incremental.db'}")
+    _create_schema(engine)
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO jobs (id, type, status, payload_json, attempts, max_attempts)
+                VALUES ('5', 'rag_reindex_incremental', 'queued', '{"requested_by":"test"}', 0, 3)
+                """
+            )
+        )
+
+    job = _claim_next_job(engine, job_types=("rag_reindex_incremental",))
+    assert job is not None
+    assert job["type"] == "rag_reindex_incremental"
+    _process_claimed_job(engine, job, runner=lambda _: {"mode": "incremental", "updated": 1})
+
+    with engine.connect() as connection:
+        row = connection.execute(
+            text("SELECT status, attempts, result_json, error FROM jobs WHERE id = '5'")
+        ).fetchone()
+
+    assert row is not None
+    assert row[0] == "succeeded"
+    assert row[1] == 0
+    assert "\"mode\": \"incremental\"" in str(row[2])
+    assert row[3] is None
+
+
 def test_run_job_subprocess_propagates_ollama_and_rag_env(monkeypatch) -> None:
     monkeypatch.setenv("WORKER_API_PROJECT_DIR", "/workspace/apps/api")
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://ollama:11434/v1")
@@ -207,14 +238,14 @@ def test_run_job_subprocess_propagates_ollama_and_rag_env(monkeypatch) -> None:
 
     monkeypatch.setattr("worker.main.subprocess.run", fake_run)
 
-    result = _run_job_subprocess("ollama_warmup", {"requested_by": "test"})
+    result = _run_job_subprocess("rag_reindex_incremental", {"requested_by": "test"})
 
     assert result == {"ok": True}
     command = captured["command"]
     kwargs = captured["kwargs"]
     assert isinstance(command, list)
     assert isinstance(kwargs, dict)
-    assert "api.services.rag.warmup_job_runner" in command
+    assert "api.services.rag.incremental_reindex_job_runner" in command
     assert "--payload-json" in command
     assert kwargs["cwd"] == "/workspace"
     env = kwargs["env"]

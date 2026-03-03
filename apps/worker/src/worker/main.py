@@ -14,12 +14,14 @@ from sqlalchemy.engine import Engine
 
 SUPPORTED_JOB_TYPES = (
     "rag_reindex",
+    "rag_reindex_incremental",
     "ollama_warmup",
     "rag_verify_index",
 )
 
 RUNNER_MODULE_BY_JOB_TYPE = {
     "rag_reindex": "api.services.rag.reindex_job_runner",
+    "rag_reindex_incremental": "api.services.rag.incremental_reindex_job_runner",
     "ollama_warmup": "api.services.rag.warmup_job_runner",
     "rag_verify_index": "api.services.rag.verify_index_job_runner",
 }

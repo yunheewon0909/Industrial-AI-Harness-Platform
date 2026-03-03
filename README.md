@@ -244,23 +244,52 @@ uv run --project apps/api alembic -c apps/api/alembic.ini heads
 
 ### 7.2.1 Reindex Job Queue API
 
-`POST /rag/reindex`는 `type=rag_reindex` job을 큐에 넣고 worker가 백그라운드 실행합니다.
+`POST /rag/reindex`는 mode에 따라 full/incremental job을 큐에 넣고 worker가 백그라운드 실행합니다.
+
+- `mode=full` (default) -> `type=rag_reindex`
+- `mode=incremental` -> `type=rag_reindex_incremental`
+
+incremental semantics (M2):
+
+- `RAG_SOURCE_DIR`를 스캔해 `source_path + content_hash` 기준으로 변경분만 반영
+- changed/new 문서만 re-chunk/re-embed
+- source에서 사라진 문서는 `documents + chunks`에서 삭제
+- 전체 재생성이 필요하면 `mode=full` 사용
+
+권장 운영 순서:
+
+1. `POST /rag/warmup`
+2. `POST /rag/verify`
+3. `POST /rag/reindex?mode=incremental`
+
+주의(M2 한정): SQLite write contention 방지를 위해 full/incremental reindex를 동시에 실행하지 않는다.
 
 ```bash
-# enqueue (empty body)
+# enqueue full (default)
 curl -sS -X POST http://127.0.0.1:8000/rag/reindex
+
+# enqueue explicit full
+curl -sS -X POST 'http://127.0.0.1:8000/rag/reindex?mode=full'
+
+# enqueue incremental
+curl -sS -X POST 'http://127.0.0.1:8000/rag/reindex?mode=incremental'
 
 # enqueue with optional payload_json
-curl -sS -X POST http://127.0.0.1:8000/rag/reindex \
+curl -sS -X POST 'http://127.0.0.1:8000/rag/reindex?mode=incremental' \
   -H "Content-Type: application/json" \
-  -d '{"payload_json":{"requested_by":"manual","notes":"nightly full rebuild"}}'
+  -d '{"payload_json":{"requested_by":"manual","notes":"changed docs only"}}'
 
 # duplicate queued/running job exists -> 409
-curl -sS -X POST http://127.0.0.1:8000/rag/reindex
-# {"detail":"rag_reindex already queued/running","existing_job_id":"..."}
+curl -sS -X POST 'http://127.0.0.1:8000/rag/reindex?mode=incremental'
+# {"detail":"rag_reindex_incremental already queued/running","existing_job_id":"..."}
+
+# mode validation error -> 422
+curl -sS -X POST 'http://127.0.0.1:8000/rag/reindex?mode=invalid'
+# {"detail":[...query mode validation error...]}
 
 # list/filter
 curl -sS "http://127.0.0.1:8000/jobs?type=rag_reindex&status=queued"
+curl -sS "http://127.0.0.1:8000/jobs?type=rag_reindex_incremental&status=queued"
 
 # detail
 curl -sS http://127.0.0.1:8000/jobs/<job_id>

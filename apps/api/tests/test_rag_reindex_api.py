@@ -49,6 +49,56 @@ def test_enqueue_rag_reindex_returns_conflict_when_active_job_exists(client: Tes
     }
 
 
+def test_enqueue_rag_reindex_incremental_creates_incremental_job(client: TestClient) -> None:
+    response = client.post("/rag/reindex?mode=incremental")
+
+    assert response.status_code == 202
+    body = response.json()
+
+    with Session(get_engine()) as session:
+        job = session.get(JobRecord, body["job_id"])
+
+    assert job is not None
+    assert job.type == "rag_reindex_incremental"
+    assert job.status == "queued"
+
+
+def test_enqueue_rag_reindex_rejects_invalid_mode(client: TestClient) -> None:
+    response = client.post("/rag/reindex?mode=invalid")
+
+    assert response.status_code == 422
+
+
+def test_enqueue_rag_reindex_incremental_not_blocked_by_running_full_job(client: TestClient) -> None:
+    with Session(get_engine()) as session:
+        session.add(JobRecord(id="12", type="rag_reindex", status="running"))
+        session.commit()
+
+    response = client.post("/rag/reindex?mode=incremental")
+
+    assert response.status_code == 202
+    body = response.json()
+    with Session(get_engine()) as session:
+        job = session.get(JobRecord, body["job_id"])
+
+    assert job is not None
+    assert job.type == "rag_reindex_incremental"
+
+
+def test_enqueue_rag_reindex_incremental_conflict_when_incremental_active(client: TestClient) -> None:
+    with Session(get_engine()) as session:
+        session.add(JobRecord(id="13", type="rag_reindex_incremental", status="queued"))
+        session.commit()
+
+    response = client.post("/rag/reindex?mode=incremental")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "rag_reindex_incremental already queued/running",
+        "existing_job_id": "13",
+    }
+
+
 def test_get_job_detail_returns_job_payload(client: TestClient) -> None:
     with Session(get_engine()) as session:
         session.add(

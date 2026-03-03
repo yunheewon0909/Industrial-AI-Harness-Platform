@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import json
 import re
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -171,9 +171,13 @@ def health() -> dict[str, str]:
 
 
 @app.post("/rag/reindex")
-def enqueue_rag_reindex(request: ReindexEnqueueRequest | None = None) -> JSONResponse:
+def enqueue_rag_reindex(
+    request: ReindexEnqueueRequest | None = None,
+    mode: Literal["full", "incremental"] = Query(default="full"),
+) -> JSONResponse:
     payload_json = request.payload_json if request is not None else None
-    return _enqueue_job(job_type="rag_reindex", payload_json=payload_json)
+    job_type = "rag_reindex_incremental" if mode == "incremental" else "rag_reindex"
+    return _enqueue_job(job_type=job_type, payload_json=payload_json)
 
 
 @app.post("/rag/warmup")
