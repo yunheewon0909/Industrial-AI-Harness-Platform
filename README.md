@@ -1,5 +1,140 @@
 # Industrial AI Harness Platform
 
+## 0. Portfolio Snapshot
+Industrial AI Harness Platform은 산업 현장의 AI 운영 자동화를 위해 API/Worker/RAG를 한 레포에서 검증 가능한 형태로 묶은 실행 플랫폼입니다. Postgres 기반 Job Queue와 Worker 상태 전이를 통해 비동기 운영 작업(`warmup`, `verify`, `reindex`)을 안정적으로 처리합니다. 실행 철학은 `호스트(macOS)=brew+uv 중심`, `위험 실행(OMX madmax/codex)=Docker sandbox 격리`입니다.
+
+## 1. Implemented Features
+- [x] **API (FastAPI)**: `/health`, `/jobs`, `/jobs/{job_id}`로 상태 확인/큐 조회/상세 조회 제공.
+- [x] **Job Queue via Postgres**: `jobs` 테이블 기반으로 `queued -> running -> succeeded/failed` 상태 전이 관리.
+- [x] **Worker Runtime**: heartbeat upsert, queued job poll/claim, retry/backoff 재시도, 완료 시 `result_json` 기록.
+- [x] **RAG v1**: `data/sample_docs` ingestion(`rag-ingest`)으로 `data/rag_index/rag.db` 생성, `/rag/search`, `/ask`(RAG+Ollama) 제공.
+- [x] **Operational Jobs**: `/rag/warmup`, `/rag/verify`, `/rag/reindex`(full/incremental) enqueue + 백그라운드 실행.
+- [x] **OMX Sandbox**: `omx --madmax`, `codex`를 컨테이너 내부로 격리하고 SSH agent forwarding, `~/.codex` read-only mount + one-time copy 적용.
+
+## 2. Quick Demo (5~10분)
+
+### A) Compose 트랙 (권장)
+1) **서비스 기동**
+```bash
+docker compose up -d --build
+```
+기대 결과: `api`, `worker`, `postgres`, `ollama` 컨테이너가 실행 상태.
+
+2) **(초회 1회) Ollama 모델 pull**
+```bash
+docker compose exec -T ollama ollama pull qwen2.5:3b-instruct-q4_K_M
+docker compose exec -T ollama ollama pull qwen2.5:7b-instruct-q4_K_M
+docker compose exec -T ollama ollama pull nomic-embed-text
+```
+기대 결과: pull 완료 후 `/ask`, `/rag/warmup` 실패율이 크게 줄어듭니다.
+
+3) **헬스체크**
+```bash
+curl -s http://127.0.0.1:8000/health
+```
+기대 결과: HTTP 200 + `{"status":"ok"}`.
+
+4) **Warmup job enqueue**
+```bash
+curl -sS -X POST http://127.0.0.1:8000/rag/warmup
+```
+기대 결과: HTTP 202 + `{"job_id":"...","status":"queued"}` (중복 시 409).
+
+5) **Reindex job enqueue (incremental 또는 full)**
+```bash
+curl -sS -X POST 'http://127.0.0.1:8000/rag/reindex?mode=incremental'
+# 또는
+curl -sS -X POST 'http://127.0.0.1:8000/rag/reindex?mode=full'
+```
+기대 결과: HTTP 202 + queued job 생성, 이후 상태가 `running -> succeeded/failed`로 전이.
+
+6) **Verify job enqueue**
+```bash
+curl -sS -X POST http://127.0.0.1:8000/rag/verify
+```
+기대 결과: HTTP 202 + verify job 생성, 성공 시 `result_json`에 인덱스 점검 결과 기록.
+
+7) **RAG 검색 + 질의응답**
+```bash
+curl -sG "http://127.0.0.1:8000/rag/search" \
+  --data-urlencode "q=maintenance automation" \
+  --data-urlencode "k=3"
+curl -s -X POST "http://127.0.0.1:8000/ask" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What maintenance actions are recommended?","k":3}'
+```
+기대 결과: `/rag/search`는 검색 hit 배열을, `/ask`는 `answer + sources[] + meta`를 반환.
+
+### B) Host-only 트랙 (가능 시)
+1) **RAG 인덱스 생성**
+```bash
+uv run --project apps/api rag-ingest
+```
+기대 결과: `data/rag_index/rag.db` 생성.
+
+2) **API 실행**
+```bash
+uv run --project apps/api uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+기대 결과: 로컬 `:8000`에서 API 응답 가능.
+
+3) **검색/질의 API 확인**
+```bash
+curl -sG "http://127.0.0.1:8000/rag/search" \
+  --data-urlencode "q=maintenance automation" \
+  --data-urlencode "k=3"
+curl -s -X POST "http://127.0.0.1:8000/ask" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What maintenance actions are recommended?","k":3}'
+```
+기대 결과: `/rag/search`는 `chunk_id/source_path/score/text`, `/ask`는 `answer/sources/meta` 포함.
+
+### Job Status 확인 (Queue/Worker 진행상태)
+상태 전이는 `queued -> running -> succeeded/failed` 순서로 진행됩니다.
+1) **enqueue 응답에서 `job_id` 확인** (위 Quick Demo enqueue 응답과 연결)
+```bash
+curl -sS -X POST http://127.0.0.1:8000/rag/warmup
+```
+기대 결과: `{"job_id":"...","status":"queued"}`에서 `job_id`를 복사해 이후 상세 조회에 사용합니다.
+2) **전체 job 목록 보기 (`GET /jobs`)**
+```bash
+curl -sS http://127.0.0.1:8000/jobs
+```
+기대 결과: 현재 큐의 job 목록이 배열(JSON)로 반환됩니다.
+3) **type/status로 필터링 (`GET /jobs?type=...&status=...`)**
+```bash
+curl -sS "http://127.0.0.1:8000/jobs?type=rag_reindex_incremental&status=queued"
+curl -sS "http://127.0.0.1:8000/jobs?type=ollama_warmup&status=running"
+curl -sS "http://127.0.0.1:8000/jobs?type=rag_verify_index&status=queued"
+```
+기대 결과: 지정한 `type`/`status` 조건의 job만 조회됩니다 (`queued`, `running` 확인).
+4) **특정 job 상세 (`GET /jobs/{job_id}`)**
+```bash
+curl -sS http://127.0.0.1:8000/jobs/<job_id>
+```
+기대 결과: 상세 JSON의 `status`, `attempts`, `error`, `result_json` 필드에서 진행 상태/실패 원인/결과를 확인합니다.
+5) **worker 로그로 실제 처리 확인**
+```bash
+docker compose logs --tail=200 worker
+docker compose logs -f --tail=200 worker
+```
+기대 결과: `[worker] heartbeat upserted ...`, `[worker] job succeeded ...`, `[worker] job failed ...` 로그로 처리 진행을 확인할 수 있습니다.
+6) **(선택) DB 직접 조회**
+```bash
+docker compose exec -T postgres psql -U postgres -d industrial_ai -c "select id,type,status,updated_at from jobs order by updated_at desc limit 10;"
+```
+기대 결과: API 조회와 동일한 최신 job 상태를 DB에서 직접 확인할 수 있습니다.
+`queued`에서 오래 멈추면 먼저 `worker` 컨테이너/로그를 확인하세요. 코드 변경 직후라면 `docker compose restart api worker` 또는 `docker compose up -d --build --force-recreate`로 재기동합니다. enqueue 시 `409 already queued/running`이 오면 동일 타입 job이 이미 진행 중인지 확인하세요.
+자세한 조회 패턴은 아래 `7.2.2 Operational jobs`의 `Job 조회 치트시트`를 참고하세요.
+
+## 3. Repo Navigation
+- `apps/api/src/api/main.py`: FastAPI 엔드포인트(`/health`, `/jobs`, `/jobs/{job_id}`, `/rag/*`, `/ask`).
+- `apps/worker/src/worker/main.py`: worker loop, heartbeat, poll/claim, job runner dispatch.
+- `apps/api/src/api/services/rag/`: ingestion/query/warmup/verify/reindex runner 로직.
+- `data/sample_docs/`: RAG 입력 문서 샘플.
+- `data/rag_index/`: 런타임 인덱스 출력(`rag.db`, git ignored).
+- `compose.yml`, `compose.omx.yml`, `Dockerfile`, `entrypoint.sh`: 실행/격리/부트스트랩 진입점.
+
 Week-1 MVP를 위한 초기 스켈레톤 저장소입니다.  
 원칙은 `호스트(macOS) = Homebrew + uv 중심`, `위험 실행(OMX madmax/codex) = Docker sandbox 내부 전용`입니다.
 
